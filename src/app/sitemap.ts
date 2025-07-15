@@ -9,7 +9,7 @@ const psecPages = [
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseURL = "https://grablink.xyz";
+  const baseURL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const psecUrls = psecPages.map((page) => ({
     url: `${baseURL}/${page}`,

@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GrabLink | Instant File Sharing",
+  title: "Tweet from Cursor",
   description:
     "The simplest way to share files. Drag, drop, and get a shareable link instantly. Secure, fast, and easy to use.",
 };
