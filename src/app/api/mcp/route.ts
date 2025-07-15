@@ -335,7 +335,7 @@ async function deleteTweet(args: any, userId: string) {
 
     // Broadcast tweet deletion to WebSocket clients
     try {
-      broadcastTweetDeleted(tweet.id, userId);
+      broadcastTweetDeleted(tweet.nanoId, userId);
     } catch (error) {
       console.warn("Failed to broadcast tweet deletion:", error);
     }
@@ -421,14 +421,7 @@ async function postTweet(args: any, userId: string) {
         updatedAt: new Date(),
       })
       .where(eq(TweetSchema.id, tweet.id))
-      .returning({
-        nanoId: TweetSchema.nanoId,
-        content: TweetSchema.content,
-        status: TweetSchema.status,
-        postedAt: TweetSchema.postedAt,
-        twitterTweetId: TweetSchema.twitterTweetId,
-        tweetType: TweetSchema.tweetType,
-      });
+      .returning();
       
     try {
       broadcastTweetUpdated(updatedTweet as any, userId);
@@ -548,13 +541,7 @@ async function rescheduleTweet(args: any, userId: string) {
         updatedAt: new Date(),
       })
       .where(eq(TweetSchema.id, tweet.id))
-      .returning({
-        nanoId: TweetSchema.nanoId,
-        content: TweetSchema.content,
-        status: TweetSchema.status,
-        scheduledFor: TweetSchema.scheduledFor,
-        tweetType: TweetSchema.tweetType,
-      });
+      .returning();
       
     try {
       broadcastTweetUpdated(updatedTweet as any, userId);
@@ -663,13 +650,7 @@ async function convertDraftToScheduled(args: any, userId: string) {
         updatedAt: new Date(),
       })
       .where(eq(TweetSchema.id, tweet.id))
-      .returning({
-        nanoId: TweetSchema.nanoId,
-        content: TweetSchema.content,
-        status: TweetSchema.status,
-        scheduledFor: TweetSchema.scheduledFor,
-        tweetType: TweetSchema.tweetType,
-      });
+      .returning();
       
     try {
       broadcastTweetUpdated(updatedTweet as any, userId);

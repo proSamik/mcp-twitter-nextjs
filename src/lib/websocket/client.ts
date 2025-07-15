@@ -297,13 +297,15 @@ export function useTweetListWebSocket(
 
     onTweetUpdated: (updatedTweet: TweetEntity) => {
       const existingTweetIndex = tweetsRef.current.findIndex(
-        (tweet) => tweet.id === updatedTweet.id,
+        (tweet) => 
+          tweet.nanoId === updatedTweet.nanoId || 
+          tweet.id === updatedTweet.id
       );
       
       if (existingTweetIndex !== -1) {
         // Update existing tweet
         const updatedTweets = tweetsRef.current.map((tweet) =>
-          tweet.id === updatedTweet.id ? updatedTweet : tweet,
+          tweet.nanoId === updatedTweet.nanoId || tweet.id === updatedTweet.id ? updatedTweet : tweet,
         );
         updateTweets(updatedTweets);
       } else {
@@ -315,7 +317,7 @@ export function useTweetListWebSocket(
 
     onTweetDeleted: ({ tweetId }) => {
       const updatedTweets = tweetsRef.current.filter(
-        (tweet) => tweet.nanoId !== tweetId,
+        (tweet) => tweet.nanoId !== tweetId && tweet.id !== tweetId,
       );
       updateTweets(updatedTweets);
     },
