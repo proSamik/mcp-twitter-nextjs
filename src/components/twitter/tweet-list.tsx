@@ -288,8 +288,7 @@ export function TweetList({ userId }: TweetListProps) {
           <div className="mb-4">
             <TweetEmbed 
               tweetId={tweet.twitterTweetId}
-              tweetContent={tweet.content}
-              showPreview={false}
+              showPreview={true}
               className="mb-3"
             />
           </div>

@@ -1,28 +1,39 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Tweet } from "react-tweet";
 import { Card, CardContent } from "ui/card";
 import { Button } from "ui/button";
 import { Badge } from "ui/badge";
 import { ExternalLink, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 
 interface TweetEmbedProps {
   tweetId: string;
-  tweetContent?: string;
   showPreview?: boolean;
   className?: string;
 }
 
 export function TweetEmbed({ 
   tweetId, 
-  tweetContent, 
-  showPreview = false, 
+  showPreview = true, 
   className = "" 
 }: TweetEmbedProps) {
   const [isExpanded, setIsExpanded] = useState(showPreview);
   const [embedError, setEmbedError] = useState(false);
+  const { theme, resolvedTheme } = useTheme();
+  const [tweetTheme, setTweetTheme] = useState<'light' | 'dark'>('dark');
+
+  // Detect theme and set tweet theme
+  useEffect(() => {
+    const currentTheme = resolvedTheme || theme;
+    if (currentTheme?.includes('dark')) {
+      setTweetTheme('dark');
+    } else {
+      setTweetTheme('light');
+    }
+  }, [theme, resolvedTheme]);
 
   const handleTogglePreview = () => {
     setIsExpanded(!isExpanded);
@@ -84,13 +95,6 @@ export function TweetEmbed({
           </div>
         </div>
 
-        {/* Original content preview */}
-        {tweetContent && (
-          <div className="mb-3 p-3 bg-muted/50 rounded-lg border-l-2 border-l-blue-400">
-            <p className="text-sm text-muted-foreground mb-1">Original content:</p>
-            <p className="text-sm whitespace-pre-wrap">{tweetContent}</p>
-          </div>
-        )}
 
         {/* Embedded tweet preview */}
         {isExpanded && (
@@ -108,26 +112,28 @@ export function TweetEmbed({
                 </div>
               </div>
             ) : (
-              <div className="border rounded-lg overflow-hidden">
-                <Tweet 
-                  id={tweetId}
-                  onError={handleEmbedError}
-                  components={{
-                    TweetNotFound: ({ error }) => (
-                      <div className="flex items-center gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <AlertCircle className="h-4 w-4 text-yellow-500" />
-                        <div>
-                          <p className="text-sm font-medium text-yellow-800">
-                            Tweet not found
-                          </p>
-                          <p className="text-xs text-yellow-600 mt-1">
-                            {error?.message || "This tweet may have been deleted or is not accessible."}
-                          </p>
+              <div className={`border rounded-lg overflow-hidden ${tweetTheme === 'dark' ? 'dark' : ''}`}>
+                <div className={tweetTheme === 'dark' ? 'dark' : 'light'}>
+                  <Tweet 
+                    id={tweetId}
+                    onError={handleEmbedError}
+                    components={{
+                      TweetNotFound: ({ error }) => (
+                        <div className="flex items-center gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <AlertCircle className="h-4 w-4 text-yellow-500" />
+                          <div>
+                            <p className="text-sm font-medium text-yellow-800">
+                              Tweet not found
+                            </p>
+                            <p className="text-xs text-yellow-600 mt-1">
+                              {error?.message || "This tweet may have been deleted or is not accessible."}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ),
-                  }}
-                />
+                      ),
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>
