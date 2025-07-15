@@ -11,6 +11,14 @@ import { broadcastTweetUpdated } from '@/lib/websocket/server';
  */
 export async function POST(request: NextRequest) {
   try {
+    // // Check if request is from allowed QStash URL
+    // const origin = request.headers.get('origin') || request.headers.get('referer') || '';
+    // const qstashUrl = process.env.QSTASH_URL;
+    // if (qstashUrl && !origin.includes(qstashUrl)) {
+    //   console.error('Request not from allowed QStash URL:', origin, 'Expected:', qstashUrl);
+    //   return NextResponse.json({ error: 'Unauthorized origin' }, { status: 403 });
+    // }
+
     // Get headers for signature verification
     const signature = request.headers.get('upstash-signature');
     if (!signature) {
@@ -20,10 +28,14 @@ export async function POST(request: NextRequest) {
 
     // Get raw body for signature verification
     const body = await request.text();
+    const url = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/tweet`;
     
-    // Verify QStash signature
-    if (!QStashWebhookVerifier.verifySignature(body, signature)) {
+    // Verify QStash signature with proper URL
+    if (!(await QStashWebhookVerifier.verifySignature(body, signature, url))) {
       console.error('Invalid QStash signature');
+      console.error('Signature:', signature);
+      console.error('Body length:', body.length);
+      console.error('URL:', url);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 

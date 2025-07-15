@@ -7,11 +7,10 @@ import { Textarea } from "ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "ui/select";
 import { Input } from "ui/input";
 import { Badge } from "ui/badge";
-import { Calendar } from "ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "ui/popover";
 import { Send, Calendar as CalendarIcon, Clock, Hash, AtSign, Save } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useTwitterWebSocket } from "@/lib/websocket/client";
 
 interface TwitterAccount {
   id: string;
@@ -19,16 +18,53 @@ interface TwitterAccount {
   displayName: string;
 }
 
-export function TweetComposer() {
+interface TweetComposerProps {
+  userId?: string;
+}
+
+export function TweetComposer({ userId }: TweetComposerProps = {}) {
   const [content, setContent] = useState("");
   const [accounts, setAccounts] = useState<TwitterAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [isScheduled, setIsScheduled] = useState(false);
-  const [scheduledDate, setScheduledDate] = useState<Date>();
-  const [scheduledTime, setScheduledTime] = useState("09:00");
+  const [scheduleDateTime, setScheduleDateTime] = useState<string>("");
   const [posting, setPosting] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Set up WebSocket for real-time feedback
+  useTwitterWebSocket(userId || null, {
+    onTweetCreated: (tweet) => {
+      console.log("Real-time: Tweet created", tweet);
+      if (tweet.status === 'draft') {
+        toast.success("Draft saved and synced!", {
+          description: `Draft "${tweet.content.substring(0, 50)}..." saved successfully`
+        });
+      } else if (tweet.status === 'scheduled') {
+        toast.success("Tweet scheduled successfully!", {
+          description: `Tweet "${tweet.content.substring(0, 50)}..." scheduled via UI sync`
+        });
+      }
+    },
+    onTweetUpdated: (tweet) => {
+      console.log("Real-time: Tweet updated", tweet);
+      if (tweet.status === 'draft') {
+        toast.success("Draft updated!", {
+          description: `Draft "${tweet.content.substring(0, 50)}..." was updated`
+        });
+      } else if (tweet.status === 'scheduled') {
+        toast.success("Tweet scheduled!", {
+          description: `Tweet "${tweet.content.substring(0, 50)}..." was scheduled`
+        });
+      }
+    },
+    onTweetDeleted: (tweetId) => {
+      console.log("Real-time: Tweet deleted", tweetId);
+      toast.success("Tweet deleted!", {
+        description: "Tweet was deleted successfully"
+      });
+    },
+  });
 
   useEffect(() => {
     fetchAccounts();
@@ -123,32 +159,35 @@ export function TweetComposer() {
       toast.error("Tweet content is required");
       return;
     }
-
     if (!selectedAccount) {
       toast.error("Please select a Twitter account");
       return;
     }
-
-    if (!scheduledDate) {
-      toast.error("Please select a date");
+    if (!scheduleDateTime) {
+      toast.error("Please select a schedule time");
       return;
     }
-
     if (getCharacterCount(content) > 280) {
       toast.error("Tweet exceeds 280 character limit");
       return;
     }
-
-    // Combine date and time
-    const [hours, minutes] = scheduledTime.split(':').map(Number);
-    const scheduledDateTime = new Date(scheduledDate);
-    scheduledDateTime.setHours(hours, minutes, 0, 0);
-
-    if (scheduledDateTime <= new Date()) {
+    // Use datetime-local input directly (like tweet-list edit dialog)
+    const localDateTime = new Date(scheduleDateTime);
+    
+    // Validate: must be in the future and within 7 days
+    const now = new Date();
+    const delayMs = localDateTime.getTime() - now.getTime();
+    if (delayMs < 0) {
       toast.error("Scheduled time must be in the future");
       return;
     }
-
+    if (delayMs > 604800000) { // 7 days in milliseconds
+      toast.error("You can only schedule tweets up to 7 days in advance.");
+      return;
+    }
+    
+    // Send local datetime directly (server will handle timezone conversion)
+    const scheduledForLocal = scheduleDateTime;
     setScheduling(true);
     try {
       const response = await fetch('/api/twitter/schedule', {
@@ -159,16 +198,15 @@ export function TweetComposer() {
         body: JSON.stringify({
           content,
           twitterAccountId: selectedAccount,
-          scheduledFor: scheduledDateTime.toISOString(),
+          scheduledFor: scheduledForLocal,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Send user's timezone
         }),
       });
-
       const data = await response.json();
-
       if (data.success) {
-        toast.success(`Tweet scheduled for ${format(scheduledDateTime, "MMM d, yyyy 'at' h:mm a")}`);
+        toast.success(`Tweet scheduled for ${format(localDateTime, "MMM d, yyyy 'at' h:mm a")}`);
         setContent("");
-        setScheduledDate(undefined);
+        setScheduleDateTime("");
         setIsScheduled(false);
       } else {
         toast.error(data.error || "Failed to schedule tweet");
@@ -310,36 +348,15 @@ export function TweetComposer() {
               <span className="text-sm font-medium">Schedule Tweet</span>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm">Date</label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start">
-                      <CalendarIcon className="h-4 w-4 mr-2" />
-                      {scheduledDate ? format(scheduledDate, "MMM d, yyyy") : "Select date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={scheduledDate}
-                      onSelect={setScheduledDate}
-                      disabled={(date) => date < new Date()}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm">Time</label>
-                <Input
-                  type="time"
-                  value={scheduledTime}
-                  onChange={(e) => setScheduledTime(e.target.value)}
-                />
-              </div>
+            <div className="space-y-2">
+              <label className="text-sm">Schedule for:</label>
+              <Input
+                type="datetime-local"
+                value={scheduleDateTime}
+                onChange={e => setScheduleDateTime(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                className="w-full"
+              />
             </div>
           </div>
         )}
@@ -368,7 +385,7 @@ export function TweetComposer() {
           {isScheduled ? (
             <Button
               onClick={handleScheduleTweet}
-              disabled={!content.trim() || !selectedAccount || scheduling}
+              disabled={!content.trim() || !selectedAccount || !scheduleDateTime || scheduling}
               className="flex-1"
             >
               <CalendarIcon className="h-4 w-4 mr-2" />

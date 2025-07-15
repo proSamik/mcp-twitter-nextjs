@@ -1,5 +1,4 @@
-import { Client } from '@upstash/qstash';
-import { createHmac } from 'crypto';
+import { Client, Receiver } from '@upstash/qstash';
 
 /**
  * QStash client for reliable tweet scheduling
@@ -12,12 +11,12 @@ class UpstashQStash {
    */
   static getClient(): Client {
     if (!this.instance) {
-      if (!process.env.UPSTASH_QSTASH_TOKEN) {
-        throw new Error('UPSTASH_QSTASH_TOKEN is required');
+      if (!process.env.QSTASH_TOKEN) {
+        throw new Error('QSTASH_TOKEN is required');
       }
 
       this.instance = new Client({
-        token: process.env.UPSTASH_QSTASH_TOKEN,
+        token: process.env.QSTASH_TOKEN,
       });
     }
 
@@ -38,6 +37,11 @@ export class TweetScheduler {
 
   /**
    * Schedule a tweet to be posted at a specific time
+   * @param tweetId - The tweet's nanoId
+   * @param scheduledFor - Date/time to post (UTC)
+   * @param tweetData - Tweet content and metadata
+   * @returns QStash messageId
+   * @remarks QStash delay is in seconds, not milliseconds
    */
   async scheduleTweet(
     tweetId: string,
@@ -49,7 +53,8 @@ export class TweetScheduler {
       mediaIds?: string[];
       isThread?: boolean;
       threadTweets?: string[];
-    }
+    },
+    delaySeconds?: number // Optional pre-calculated delay
   ): Promise<{ messageId: string }> {
     try {
       const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/tweet`;
@@ -60,16 +65,34 @@ export class TweetScheduler {
         ...tweetData,
       };
 
+      // Use pre-calculated delay if provided, otherwise calculate
+      let finalDelaySeconds: number;
+      if (delaySeconds !== undefined) {
+        finalDelaySeconds = Math.max(0, delaySeconds);
+        console.log(`QStash scheduling: using client delay=${finalDelaySeconds}s, scheduledFor=${scheduledFor.toISOString()}`);
+      } else {
+        // Fallback calculation
+        const now = new Date();
+        const delayMs = scheduledFor.getTime() - now.getTime();
+        finalDelaySeconds = Math.max(0, Math.floor(delayMs / 1000));
+        
+        if (delayMs < 0) {
+          throw new Error(`Cannot schedule in the past. Scheduled: ${scheduledFor.toISOString()}, Now: ${now.toISOString()}`);
+        }
+        console.log(`QStash scheduling: calculated delay=${finalDelaySeconds}s (${delayMs}ms), scheduledFor=${scheduledFor.toISOString()}, now=${now.toISOString()}`);
+      }
+      
       const result = await this.qstash.publishJSON({
         url: webhookUrl,
         body: payload,
-        delay: Math.max(0, scheduledFor.getTime() - Date.now()),
+        delay: finalDelaySeconds,
         headers: {
           'Content-Type': 'application/json',
           'X-Tweet-Schedule': 'true',
         },
       });
 
+      console.log(`QStash result:`, result);
       return { messageId: result.messageId };
     } catch (error) {
       console.error('Error scheduling tweet:', error);
@@ -79,6 +102,11 @@ export class TweetScheduler {
 
   /**
    * Schedule a thread to be posted
+   * @param threadId - The thread's nanoId
+   * @param scheduledFor - Date/time to post (UTC)
+   * @param threadData - Thread content and metadata
+   * @returns QStash messageIds
+   * @remarks QStash delay is in seconds, not milliseconds
    */
   async scheduleThread(
     threadId: string,
@@ -99,10 +127,21 @@ export class TweetScheduler {
         ...threadData,
       };
 
+      // QStash expects delay in seconds, not ms
+      const now = new Date();
+      const delayMs = scheduledFor.getTime() - now.getTime();
+      const delaySeconds = Math.max(0, Math.floor(delayMs / 1000));
+      
+      if (delayMs < 0) {
+        throw new Error(`Cannot schedule in the past. Scheduled: ${scheduledFor.toISOString()}, Now: ${now.toISOString()}`);
+      }
+      
+      console.log(`QStash thread scheduling: delay=${delaySeconds}s (${delayMs}ms), scheduledFor=${scheduledFor.toISOString()}, now=${now.toISOString()}`);
+
       const result = await this.qstash.publishJSON({
         url: webhookUrl,
         body: payload,
-        delay: Math.max(0, scheduledFor.getTime() - Date.now()),
+        delay: delaySeconds,
         headers: {
           'Content-Type': 'application/json',
           'X-Thread-Schedule': 'true',
@@ -230,7 +269,7 @@ export class TweetScheduler {
       const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/analytics`;
 
       for (const hours of intervals) {
-        const delay = hours * 60 * 60 * 1000; // Convert hours to milliseconds
+        const delay = hours * 60 * 60; // Convert hours to seconds (QStash expects seconds)
         
         const result = await this.qstash.publishJSON({
           url: webhookUrl,
@@ -354,35 +393,41 @@ export class TweetScheduler {
  */
 export class QStashWebhookVerifier {
   /**
-   * Verify QStash webhook signature
+   * Verify QStash webhook signature using official SDK
    */
-  static verifySignature(
+  static async verifySignature(
     body: string,
     signature: string,
+    url: string,
     currentSigningKey?: string,
     nextSigningKey?: string
-  ): boolean {
+  ): Promise<boolean> {
     try {
-      // Using crypto module imported at top
+      const currentKey = currentSigningKey || process.env.QSTASH_CURRENT_SIGNING_KEY;
+      const nextKey = nextSigningKey || process.env.QSTASH_NEXT_SIGNING_KEY;
       
-      const keys = [
-        currentSigningKey || process.env.UPSTASH_QSTASH_CURRENT_SIGNING_KEY,
-        nextSigningKey || process.env.UPSTASH_QSTASH_NEXT_SIGNING_KEY,
-      ].filter(Boolean) as string[];
-
-      for (const key of keys) {
-        const hmac = createHmac('sha256', key);
-        hmac.update(body);
-        const expectedSignature = hmac.digest('base64');
-        
-        if (expectedSignature === signature) {
-          return true;
-        }
+      if (!currentKey) {
+        console.error('Missing QStash current signing key');
+        return false;
       }
 
-      return false;
+      const receiver = new Receiver({
+        currentSigningKey: currentKey,
+        nextSigningKey: nextKey || currentKey, // Fallback to current key if next key is not available
+      });
+
+      const isValid = await receiver.verify({
+        body,
+        signature,
+        url,
+      });
+
+      return isValid;
     } catch (error) {
       console.error('Error verifying QStash signature:', error);
+      console.error('Body:', body.substring(0, 100) + '...');
+      console.error('Signature:', signature);
+      console.error('URL:', url);
       return false;
     }
   }

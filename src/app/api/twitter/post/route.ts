@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/server';
-import { twitterAuthManager } from '@/lib/auth/twitter-oauth';
 import { pgDb as db } from '@/lib/db/pg/db.pg';
 import { TweetSchema } from '@/lib/db/pg/schema.pg';
 // import { eq } from 'drizzle-orm'; // Removed unused import
 import { broadcastTweetUpdated } from '@/lib/websocket/server';
+import { postTweetInternal } from '@/lib/twitter/post-tweet';
 
 /**
  * Post a tweet immediately
@@ -56,26 +56,24 @@ export async function POST(request: NextRequest) {
 
     // Only post to Twitter if it's not a draft
     if (status !== 'draft') {
-      // Get Twitter client for the account
-      const twitterClient = await twitterAuthManager.getTwitterClient(userId, twitterAccountId);
-
-      if (isThread && threadTweets && threadTweets.length > 1) {
-        // Post as thread
-        console.log(`Posting thread with ${threadTweets.length} tweets`);
-        const results = await twitterClient.postThread(threadTweets);
-        postedTweets = results;
-        twitterTweetId = results[0].data.id; // Use first tweet ID as primary
-      } else {
-        // Post single tweet
-        console.log(`Posting single tweet for user ${userId}`);
-        const result = await twitterClient.postTweet(content, {
-          mediaIds,
-          replyToTweetId,
-          quoteTweetId,
-        });
-        postedTweets = [result];
-        twitterTweetId = result.data.id;
+      const result = await postTweetInternal({
+        content,
+        twitterAccountId,
+        mediaIds,
+        isThread,
+        threadTweets,
+        userId,
+        replyToTweetId,
+        quoteTweetId,
+      });
+      if (!result.success) {
+        return NextResponse.json({
+          success: false,
+          error: result.error,
+        }, { status: 500 });
       }
+      twitterTweetId = result.twitterTweetId || null;
+      postedTweets = result.postedTweets || [];
     }
 
     let dbTweet: any = null;

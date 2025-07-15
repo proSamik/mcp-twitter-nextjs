@@ -5,7 +5,7 @@ import { twitterAuthManager } from '@/lib/auth/twitter-oauth';
 /**
  * Get user's connected Twitter accounts
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
       // Get current user session
       const session = await getSession();

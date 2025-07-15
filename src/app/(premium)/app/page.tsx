@@ -17,6 +17,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ConnectedAccounts } from "@/components/twitter/connected-accounts";
 import { TweetComposer } from "@/components/twitter/tweet-composer";
+import { TweetList } from "@/components/twitter/tweet-list";
 
 type Order = {
   id: string;
@@ -288,68 +289,13 @@ function DashboardContent() {
 
         {/* Tweet Composer & Scheduler */}
         <div className="col-span-full lg:col-span-2">
-          <TweetComposer />
+          <TweetComposer userId={session?.user?.id} />
         </div>
 
-        {/* Tweet Drafts */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              <CardTitle>Tweet Drafts</CardTitle>
-            </div>
-            <CardDescription>
-              Your saved tweet drafts
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No drafts yet. Start writing to save drafts.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Scheduled Tweets */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="h-5 w-5 text-primary" />
-              <CardTitle>Scheduled Tweets</CardTitle>
-            </div>
-            <CardDescription>
-              Tweets scheduled for posting
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No scheduled tweets. Schedule your first tweet above.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Posted Tweets */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-primary" />
-              <CardTitle>Posted Tweets</CardTitle>
-            </div>
-            <CardDescription>
-              Your recent posted tweets with analytics
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No posted tweets yet. Your posted tweets will appear here.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Tweet Management - Dynamic list with real data */}
+        <div className="col-span-full">
+          <TweetList userId={session?.user?.id || ""} />
+        </div>
       </div>
     </div>
   );

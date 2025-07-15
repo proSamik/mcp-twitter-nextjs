@@ -3,12 +3,19 @@
 import { useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { Task } from "@/types/planner";
+import { TweetEntity } from "@/lib/db/pg/schema.pg";
 
 interface WebSocketEvents {
   onTaskCreated?: (task: Task) => void;
   onTaskUpdated?: (task: Task) => void;
   onTaskDeleted?: (data: { taskId: string }) => void;
   onTasksReordered?: (tasks: Task[]) => void;
+}
+
+interface TwitterWebSocketEvents {
+  onTweetCreated?: (tweet: TweetEntity) => void;
+  onTweetUpdated?: (tweet: TweetEntity) => void;
+  onTweetDeleted?: (data: { tweetId: string }) => void;
 }
 
 export function useWebSocket(
@@ -163,5 +170,121 @@ export function useTaskWebSocket(
     socket,
     joinDateRoom,
     setTasks,
+  };
+}
+
+export function useTwitterWebSocket(
+  userId: string | null,
+  events: TwitterWebSocketEvents = {},
+) {
+  const socketRef = useRef<Socket | null>(null);
+  const eventsRef = useRef(events);
+
+  // Update events ref when events change (but don't reconnect)
+  eventsRef.current = events;
+
+  useEffect(() => {
+    if (!userId) return;
+
+    // Only create socket if it doesn't exist
+    if (!socketRef.current) {
+      console.log("Creating new Twitter WebSocket connection for user:", userId);
+
+      const socket = io(
+        process.env.NODE_ENV === "production"
+          ? process.env.NEXT_PUBLIC_BETTER_AUTH_URL || ""
+          : "http://localhost:3000",
+        {
+          transports: ["websocket", "polling"],
+        },
+      );
+
+      socketRef.current = socket;
+
+      // Join Twitter user room
+      socket.emit("join-user-room", userId);
+
+      // Set up Twitter event listeners
+      socket.on("tweet:created", (tweet: TweetEntity) => {
+        console.log("WebSocket: Tweet created", tweet);
+        eventsRef.current.onTweetCreated?.(tweet);
+      });
+
+      socket.on("tweet:updated", (tweet: TweetEntity) => {
+        console.log("WebSocket: Tweet updated", tweet);
+        eventsRef.current.onTweetUpdated?.(tweet);
+      });
+
+      socket.on("tweet:deleted", (data: { tweetId: string }) => {
+        console.log("WebSocket: Tweet deleted", data);
+        eventsRef.current.onTweetDeleted?.(data);
+      });
+
+      socket.on("auth-error", (message: string) => {
+        console.error("Twitter WebSocket authentication error:", message);
+      });
+
+      socket.on("connect", () => {
+        console.log("Connected to Twitter WebSocket server");
+        // Rejoin user room on reconnection
+        socket.emit("join-user-room", userId);
+      });
+
+      socket.on("disconnect", () => {
+        console.log("Disconnected from Twitter WebSocket server");
+      });
+    }
+
+    return () => {
+      // Don't disconnect on unmount - keep connection alive
+      // socket.disconnect();
+    };
+  }, [userId]); // Only depend on userId, not events
+
+  return {
+    socket: socketRef.current,
+  };
+}
+
+export function useTweetListWebSocket(
+  userId: string | null,
+  onTweetsChange: (tweets: TweetEntity[]) => void,
+) {
+  const tweetsRef = useRef<TweetEntity[]>([]);
+
+  const updateTweets = (newTweets: TweetEntity[]) => {
+    tweetsRef.current = newTweets;
+    onTweetsChange(newTweets);
+  };
+
+  const { socket } = useTwitterWebSocket(userId, {
+    onTweetCreated: (tweet: TweetEntity) => {
+      const updatedTweets = [...tweetsRef.current, tweet];
+      updateTweets(updatedTweets);
+    },
+
+    onTweetUpdated: (updatedTweet: TweetEntity) => {
+      const updatedTweets = tweetsRef.current.map((tweet) =>
+        tweet.id === updatedTweet.id ? updatedTweet : tweet,
+      );
+      updateTweets(updatedTweets);
+    },
+
+    onTweetDeleted: ({ tweetId }) => {
+      const updatedTweets = tweetsRef.current.filter(
+        (tweet) => tweet.nanoId !== tweetId,
+      );
+      updateTweets(updatedTweets);
+    },
+  });
+
+  // Update tweets reference when external tweets change
+  const setTweets = (tweets: TweetEntity[]) => {
+    tweetsRef.current = tweets;
+  };
+
+  return {
+    socket,
+    setTweets,
   };
 }

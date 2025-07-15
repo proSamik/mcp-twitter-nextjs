@@ -88,6 +88,7 @@ export const TweetSchema = pgTable("tweet", {
   scheduledFor: timestamp("scheduled_for"),
   postedAt: timestamp("posted_at"),
   twitterTweetId: text("twitter_tweet_id"), // ID from Twitter API when posted
+  qstashMessageId: text("qstash_message_id"), // QStash message ID for cancellation
   parentTweetId: uuid("parent_tweet_id"), // For threading
   threadOrder: integer("thread_order").default(0),
   mediaUrls: json("media_urls").default([]).$type<string[]>(),
