@@ -290,7 +290,8 @@ export function useTweetListWebSocket(
 
   const { socket } = useTwitterWebSocket(userId, {
     onTweetCreated: (tweet: TweetEntity) => {
-      const updatedTweets = [...tweetsRef.current, tweet];
+      // Insert new tweet at the top of the list
+      const updatedTweets = [tweet, ...tweetsRef.current];
       updateTweets(updatedTweets);
     },
 

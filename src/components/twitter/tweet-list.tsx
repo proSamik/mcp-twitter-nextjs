@@ -216,9 +216,15 @@ export function TweetList({ userId }: TweetListProps) {
     }
   };
 
-  const drafts = tweets.filter(tweet => tweet.status === 'draft');
-  const scheduled = tweets.filter(tweet => tweet.status === 'scheduled');
-  const posted = tweets.filter(tweet => tweet.status === 'posted');
+  // Sort tweets by createdAt descending (newest first)
+  const sortedTweets = [...tweets].sort((a, b) => {
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+  const drafts = sortedTweets.filter(tweet => tweet.status === 'draft');
+  const scheduled = sortedTweets.filter(tweet => tweet.status === 'scheduled');
+  const posted = sortedTweets.filter(tweet => tweet.status === 'posted');
 
   const TweetCard = ({ tweet }: { tweet: TweetEntity }) => (
     <Card key={tweet.id} className="hover:shadow-md transition-shadow">
@@ -355,13 +361,13 @@ export function TweetList({ userId }: TweetListProps) {
           </TabsList>
           
           <TabsContent value="all" className="space-y-4 mt-4">
-            {tweets.length === 0 ? (
+            {sortedTweets.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No tweets yet. Start by composing your first tweet!</p>
               </div>
             ) : (
-              tweets.map(tweet => <TweetCard key={tweet.id} tweet={tweet} />)
+              sortedTweets.map(tweet => <TweetCard key={tweet.id} tweet={tweet} />)
             )}
           </TabsContent>
           
