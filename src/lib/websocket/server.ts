@@ -59,32 +59,32 @@ export function broadcastTasksReordered(
   io.to(`planner:${date}:${userId}`).emit("tasks:reordered", tasks);
 }
 
-// Broadcast tweet creation to all users in the twitter room
+// Broadcast tweet creation to all users in the user room
 export function broadcastTweetCreated(tweet: TweetEntity, userId: string) {
   const io = getIO();
   if (!io) return;
 
-  const room = `twitter:${userId}`;
+  const room = `user:${userId}`;
   console.log(`Broadcasting tweet:created to room ${room}:`, tweet);
   io.to(room).emit("tweet:created", tweet);
 }
 
-// Broadcast tweet update to all users in the twitter room
+// Broadcast tweet update to all users in the user room
 export function broadcastTweetUpdated(tweet: TweetEntity, userId: string) {
   const io = getIO();
   if (!io) return;
 
-  const room = `twitter:${userId}`;
+  const room = `user:${userId}`;
   console.log(`Broadcasting tweet:updated to room ${room}:`, tweet);
   io.to(room).emit("tweet:updated", tweet);
 }
 
-// Broadcast tweet deletion to all users in the twitter room
+// Broadcast tweet deletion to all users in the user room
 export function broadcastTweetDeleted(tweetId: string, userId: string) {
   const io = getIO();
   if (!io) return;
 
-  const room = `twitter:${userId}`;
+  const room = `user:${userId}`;
   console.log(`Broadcasting tweet:deleted to room ${room}:`, { tweetId });
   io.to(room).emit("tweet:deleted", { tweetId });
 }

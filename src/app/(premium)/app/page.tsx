@@ -6,12 +6,10 @@ import { useEffect, useState, Suspense, useRef } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "ui/card";
 import { Badge } from "ui/badge";
-import { Crown, CreditCard, Calendar as CalendarIcon, MessageSquare, FileText } from "lucide-react";
+import { Crown, CreditCard } from "lucide-react";
 import { Skeleton } from "ui/skeleton";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";

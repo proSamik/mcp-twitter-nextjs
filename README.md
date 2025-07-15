@@ -663,7 +663,7 @@ Example -
     "my-mcp-server": {
       "url": "http://localhost:3000/api/mcp",
       "headers": {
-        "Authorization": "Bearer mcp_token"
+        "Authorization": "Bearer mcp_538333146bf7a8e8e490e9e6cc654e9d260bd1be64410fd6310cf415548ffcc3"
       }
     }
 }
