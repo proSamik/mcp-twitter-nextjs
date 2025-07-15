@@ -1,0 +1,61 @@
+{
+  "Auth": {
+    "Intro": {
+      "description": "Polar.sh भुगतान, Better Auth प्रमाणीकरण, और Postgres डेटाबेस के साथ आधुनिक वेब एप्लिकेशन बनाएं।"
+    },
+    "SignIn": {
+      "title": "वापस स्वागत है",
+      "welcome": "वापस स्वागत है",
+      "description": "जारी रखने के लिए अपने खाते में साइन इन करें",
+      "email": "ईमेल",
+      "password": "पासवर्ड",
+      "signIn": "साइन इन करें",
+      "orContinueWith": "या इसके साथ जारी रखें",
+      "noAccount": "कोई खाता नहीं है? ",
+      "signUp": "साइन अप करें",
+      "forgotPassword": "पासवर्ड भूल गए?",
+      "rememberMe": "मुझे याद रखें",
+      "enterOtp": "सत्यापन कोड दर्ज करें",
+      "otpDescription": "हमने आपके ईमेल पर सत्यापन कोड भेजा है",
+      "verifyAndSignIn": "सत्यापित करें और साइन इन करें",
+      "backToSignIn": "साइन इन पर वापस जाएं",
+      "resendCode": "कोड फिर से भेजें",
+      "oauthClientIdNotSet": "{provider} क्लाइंट ID कॉन्फ़िगर नहीं है"
+    },
+    "SignUp": {
+      "title": "खाता बनाएं",
+      "description": "अपने नए खाते के साथ शुरुआत करें",
+      "name": "पूरा नाम",
+      "email": "ईमेल",
+      "password": "पासवर्ड",
+      "confirmPassword": "पासवर्ड की पुष्टि करें",
+      "signUp": "खाता बनाएं",
+      "createAccount": "खाता बनाएं",
+      "signIn": "साइन इन करें",
+      "alreadyHaveAccount": "पहले से खाता है? ",
+      "agreeToTerms": "मैं सेवा की शर्तों और गोपनीयता नीति से सहमत हूं"
+    }
+  },
+  "Dashboard": {
+    "welcome": "आपके डैशबोर्ड में आपका स्वागत है",
+    "navigation": {
+      "dashboard": "डैशबोर्ड",
+      "profile": "प्रोफ़ाइल",
+      "settings": "सेटिंग्स",
+      "logout": "लॉग आउट"
+    }
+  },
+  "Common": {
+    "loading": "लोड हो रहा है...",
+    "error": "कुछ गलत हुआ",
+    "retry": "पुनः प्रयास करें",
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "delete": "हटाएं",
+    "edit": "संपादित करें",
+    "close": "बंद करें",
+    "continue": "जारी रखें",
+    "back": "वापस",
+    "next": "अगला"
+  }
+}

@@ -1,0 +1,268 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Polar SaaS Kit - Cursor AI Development Rules
+# Updated: January 2025
+
+## Project Overview
+
+**Polar SaaS Kit** is a production-ready Next.js starter for building modern SaaS applications with payments, authentication, and premium features. Built with Next.js 15, Better Auth, Polar.sh payments, and PostgreSQL.
+
+## Core Architecture & Constraints
+
+### 1. Framework & Technology Stack
+- **Next.js 15.3.2** with App Router (REQUIRED)
+- **TypeScript 5.8.3** - Strict mode enabled (NO JavaScript files)
+- **React 19.1.0** with concurrent features
+- **Better Auth 1.2.8** for authentication (NO next-auth)
+- **Polar.sh** for payments and billing (NO Stripe)
+- **PostgreSQL + Drizzle ORM** for database (NO Prisma)
+- **Tailwind CSS 4.1.8** for styling (NO other CSS frameworks)
+- **Biome** for linting/formatting (NO ESLint + Prettier)
+
+### 2. Project Structure Constraints
+
+#### Authentication (NEVER modify core auth structure)
+```
+src/lib/auth/
+├── server.ts     # Better Auth server config - DO NOT CHANGE POLAR SETUP
+├── client.ts     # Better Auth client config - POLAR ERROR FILTERING ACTIVE
+```
+
+#### Database (ALWAYS use repository pattern)
+```
+src/lib/db/
+├── pg/
+│   ├── schema.pg.ts    # Schema definitions - ADD FIELDS, DON'T REMOVE
+│   ├── db.pg.ts        # Connection config
+│   └── repositories/  # Data access layer - USE FOR ALL DB OPERATIONS
+```
+
+#### App Structure (FOLLOW EXACT PATTERNS)
+```
+src/app/
+├── (auth)/           # Public auth pages (sign-in, sign-up)
+├── (premium)/        # Protected premium app pages
+│   └── app/          # Main app interface with sidebar
+├── api/auth/         # Better Auth API routes - DON'T MODIFY
+├── pricing/          # Landing page pricing
+├── page.tsx          # Landing page
+└── layout.tsx        # Root layout with theme provider
+```
+
+#### Component Organization (REUSE EXISTING COMPONENTS)
+```
+src/components/
+├── ui/              # Radix UI + shadcn components - REUSE THESE
+├── layouts/         # Layout components (app-sidebar, theme-provider)
+├── landing/         # Landing page sections - MODIFY THESE FOR FEATURES
+├── dashboard.tsx    # Dashboard component with stats
+├── profile.tsx      # User profile component
+└── settings.tsx     # Settings with theme selection
+```
+
+### 3. Development Rules & Constraints
+
+#### ALWAYS Follow These Patterns:
+1. **Theme System**: Use CSS custom properties (`bg-background`, `text-foreground`, etc.)
+2. **Component Imports**: Use `ui/component-name` path aliases
+3. **Authentication**: Use `authClient` from `auth/client`
+4. **Database**: Use repositories, never direct Drizzle calls in components
+5. **Error Handling**: Use Sonner toasts for user feedback
+6. **Styling**: Use theme-aware Tailwind classes only
+
+#### NEVER Do These:
+1. **DON'T** modify Better Auth Polar plugin configuration
+2. **DON'T** use hardcoded colors (use theme CSS variables)
+3. **DON'T** create new UI components if existing ones exist
+4. **DON'T** bypass authentication checks
+5. **DON'T** modify the error filtering in auth client
+6. **DON'T** use any other payment provider than Polar
+
+#### Code Quality Requirements:
+1. **ALL functions must have JSDoc comments**
+2. **Use TypeScript strict mode** - no `any` types without justification
+3. **Follow existing naming conventions** (camelCase for files, PascalCase for components)
+4. **Add proper error boundaries** for new features
+5. **Test authentication flows** before marking complete
+
+### 4. Reusable Libraries & Components
+
+#### UI Components (src/components/ui/) - ALWAYS REUSE:
+- `button.tsx` - Button variants (default, destructive, outline, ghost)
+- `card.tsx` - Card layouts with header, content, footer
+- `dialog.tsx` - Modal dialogs
+- `select.tsx` - Dropdown selections
+- `switch.tsx` - Toggle switches
+- `badge.tsx` - Status badges
+- `input.tsx` - Form inputs
+- `sidebar.tsx` - Aceternity sidebar with theme support
+- `json-view.tsx` - JSON data display
+- `sonner.tsx` - Toast notifications
+
+#### Layout Components (src/components/layouts/) - USE THESE:
+- `app-sidebar.tsx` - Main app navigation with theme-aware colors
+- `theme-provider.tsx` - Next-themes provider
+- `conditional-navigation.tsx` - Public/private route navigation
+#### Landing Components (src/components/landing/) - EXTEND THESE:
+- `hero-section.tsx` - Main hero with CTA
+- `pricing-section.tsx` - Pricing tiers with Polar integration
+- `faq-section.tsx` - FAQ accordion
+- `footer-section.tsx` - Footer with social links
+
+#### Utility Libraries (src/lib/) - USE THESE:
+- `utils.ts` - Common utilities (cn, formatters)
+- `const.ts` - Application constants (themes, locales)
+- `cache/` - Caching utilities (memory, Redis)
+- `browser-stroage.ts` - Local storage helpers
+
+### 5. Theme System Usage
+
+#### Available Themes (20+ variants):
+- Base: default, zinc, slate, stone, gray, blue, orange, pink
+- Special: bubblegum-pop, cyberpunk-neon, retro-arcade, tropical-paradise
+- Premium: steampunk-cogs, neon-synthwave, pastel-kawaii, space-odyssey
+- Elegant: vintage-vinyl, misty-harbor, zen-garden
+
+#### CSS Custom Properties (ALWAYS USE):
+```css
+--background, --foreground
+--card, --card-foreground  
+--muted, --muted-foreground
+--sidebar, --sidebar-foreground, --sidebar-border
+--primary, --secondary, --accent
+--destructive, --border, --input, --ring
+```
+
+#### Theme Implementation Rules:
+1. **NEVER use hardcoded colors** (bg-gray-100, text-neutral-700)
+2. **ALWAYS use theme CSS variables** (bg-background, text-foreground)
+3. **Use theme-aware components** from ui/ directory
+4. **Test with multiple themes** (default, dark variants, special themes)
+
+### 6. Database Schema Guidelines
+
+#### Current Tables (DON'T REMOVE):
+- `user` - User accounts with preferences
+- `session` - Better Auth sessions  
+- `account` - OAuth and credential accounts
+- `verification` - Email verification
+
+#### Adding New Tables:
+1. **Define in schema.pg.ts** with proper types
+2. **Create repository** in pg/repositories/
+3. **Generate migration** with `pnpm db:generate`
+4. **Test locally** before deploying
+
+### 7. Authentication Flow Rules
+
+#### Better Auth Configuration:
+- **Polar plugin** handles customer creation automatically
+- **Session duration**: 7 days with 1-day refresh
+- **OAuth providers**: GitHub, Google (configured in server.ts)
+- **Error handling**: Filtered in client.ts (ORDERS_LIST_FAILED suppressed)
+
+#### Route Protection:
+- Use `(premium)` route group for protected pages
+- Check `session?.user` in components
+- Redirect to `/sign-in` for unauthenticated users
+
+### 8. Polar.sh Integration Rules
+
+#### Payment Features:
+- **Subscription management** - Monthly/yearly plans
+- **One-time payments** - Lifetime deals
+- **Customer portal** - Managed by Polar
+- **Webhook handling** - Automatic order processing
+
+#### Error Handling:
+- `ORDERS_LIST_FAILED` errors are suppressed in client
+- Customer creation happens automatically on signup
+- Graceful degradation when customer doesn't exist
+
+### 9. Development Commands
+
+#### Essential Commands:
+```bash
+pnpm dev                 # Start development server
+pnpm build              # Build for production
+pnpm lint               # Run Biome linter
+pnpm format             # Format code
+pnpm db:generate        # Generate migrations
+pnpm db:migrate         # Run migrations
+pnpm db:studio          # Open Drizzle Studio
+```
+
+#### Docker Commands:
+```bash
+pnpm docker:pg          # Start PostgreSQL only
+pnpm docker-compose:up  # Start full stack
+```
+
+### 10. File Naming & Import Conventions
+
+#### File Naming:
+- Components: `PascalCase.tsx` (UserProfile.tsx)
+- Utilities: `kebab-case.ts` (user-repository.ts)
+- Pages: `page.tsx`, `layout.tsx`
+- API routes: `route.ts`
+
+#### Import Aliases:
+```typescript
+import { Button } from "ui/button"
+import { authClient } from "auth/client"
+import { cn } from "lib/utils"
+import { UserRepository } from "lib/db/pg/repositories/user-repository"
+```
+
+### 11. Common Patterns to Follow
+
+#### Component Structure:
+```typescript
+/**
+ * Component description with purpose
+ */
+export function ComponentName({ prop }: ComponentProps) {
+  const { data: session } = authClient.useSession();
+  
+  // Always handle loading states
+  if (!session) return <div>Loading...</div>;
+  
+  return (
+    <div className="space-y-6">
+      {/* Use theme-aware classes */}
+    </div>
+  );
+}
+```
+
+#### Error Handling:
+```typescript
+try {
+  const result = await apiCall();
+  toast.success("Operation successful");
+} catch (error) {
+  console.error("Operation failed:", error);
+  toast.error("Operation failed. Please try again.");
+}
+```
+
+### 12. Performance & Security Rules
+
+#### Performance:
+- Use `loading.tsx` for route loading states
+- Implement proper error boundaries
+- Optimize images with Next.js Image component
+- Use server components where possible
+
+#### Security:
+- Validate all user inputs
+- Use type-safe database queries
+- Implement proper CORS for API routes
+- Never expose secrets in client code
+
+## Summary
+
+This is a production-ready SaaS starter kit. Follow these rules to maintain code quality, consistency, and the existing architecture. When in doubt, examine existing patterns and replicate them. 

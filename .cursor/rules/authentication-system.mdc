@@ -1,0 +1,136 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Authentication System Guide
+
+## Overview
+This project uses Better Auth with email OTP verification for secure user authentication. The system includes password reset, email verification during signup, and event tracking via Plunk.
+
+## Core Configuration
+
+### Server Configuration
+The main authentication configuration is in [src/lib/auth/server.ts](mdc:src/lib/auth/server.ts):
+- Uses Better Auth with emailOTP plugin
+- Requires email verification before login (`requireEmailVerification: true`)
+- 6-digit OTP codes with 5-minute expiration
+- Maximum 3 attempts per OTP
+- Integrated with Polar for subscription management
+
+### Client Configuration
+Client-side authentication setup in [src/lib/auth/client.ts](mdc:src/lib/auth/client.ts):
+- Includes emailOTPClient plugin for OTP functionality
+- Error handling with toast notifications
+- Polar client integration
+
+## Authentication Flows
+
+### User Registration Flow
+Located in [src/app/(auth)/sign-up/page.tsx](mdc:src/app/(auth)/sign-up/page.tsx):
+1. **Step 1**: Email validation and existence check
+2. **Step 2**: Password and confirmation input
+3. **Step 3**: Full name collection
+4. **Step 4**: Email verification with 6-digit OTP
+5. Account creation after successful email verification
+
+### Password Reset Flow
+Located in [src/app/(auth)/forgot-password/page.tsx](mdc:src/app/(auth)/forgot-password/page.tsx):
+1. **Step 1**: Email input for OTP request
+2. **Step 2**: 6-digit OTP verification
+3. **Step 3**: New password setup
+
+### Sign-In Flow
+Located in [src/app/(auth)/sign-in/page.tsx](mdc:src/app/(auth)/sign-in/page.tsx):
+- Standard email/password authentication
+- Redirects to email verification if account not verified
+- Social login options (GitHub, Google)
+
+## OTP System Features
+
+### Resend Cooldown
+Custom hook [src/hooks/use-resend-cooldown.ts](mdc:src/hooks/use-resend-cooldown.ts):
+- 2-minute (120 seconds) cooldown between resend attempts
+- Real-time countdown display in MM:SS format
+- State preserved throughout application session
+- Prevents spam and abuse
+
+### OTP Methods
+Better Auth emailOTP plugin provides:
+- `authClient.emailOtp.sendVerificationOtp()` - Send OTP codes
+- `authClient.emailOtp.verifyEmail()` - Verify email with OTP
+- `authClient.emailOtp.resetPassword()` - Reset password with OTP
+
+## Event Tracking with Plunk
+
+### Plunk Client
+Configuration in [src/lib/plunk/client.ts](mdc:src/lib/plunk/client.ts):
+- PlunkClient class for API interactions
+- Methods: `trackEvent()` and `sendEmail()`
+- Error handling and API key validation
+
+### Event Functions
+Event tracking functions in [src/lib/plunk/events.ts](mdc:src/lib/plunk/events.ts):
+- `trackEmailVerificationOTP()` - Tracks "user-otp" events with `subscribed: false`
+- `trackPasswordResetOTP()` - Tracks "reset-otp" events with `subscribed: false`
+- `trackUserSignup()` - Tracks "user-signup" events with `subscribed: true`
+
+### Event Data Structure
+OTP events use specific data format:
+```javascript
+data: {
+  otp: {
+    value: "123456",
+    persistent: false
+  }
+}
+```
+
+## Database Integration
+
+### Schema
+Database schemas in [src/lib/db/pg/schema.pg.ts](mdc:src/lib/db/pg/schema.pg.ts):
+- `user` table for user accounts
+- `session` table for authentication sessions
+- `account` table for provider-specific accounts
+- `verification` table for OTP and token storage
+
+### Hooks
+Database hooks in server configuration:
+- `user.create.after` - Automatically tracks user signup events
+- Error handling prevents breaking user creation flow
+
+## Environment Variables
+
+Required environment variables:
+- `BETTER_AUTH_SECRET` - Session encryption key
+- `POSTGRES_URL` - Database connection
+- `PLUNK_SECRET_KEY` - Plunk API key
+- OAuth credentials (optional): `GITHUB_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET`
+
+## Security Features
+
+- Email verification required before login
+- OTP rate limiting (3 attempts, 5-minute expiration)
+- Resend cooldown (2 minutes)
+- Secure session management (7-day expiration, 1-day refresh)
+- Account linking with trusted providers
+- HTTPS-only cookies in production
+
+## UI/UX Patterns
+
+### Form State Management
+Uses [src/hooks/use-object-state.ts](mdc:src/hooks/use-object-state.ts) for form data:
+- Centralized state updates
+- Type-safe property updates
+
+### Error Handling
+Consistent error handling pattern:
+- Toast notifications for user feedback
+- Non-blocking error handling for tracking
+- Graceful degradation when services fail
+
+### Loading States
+- Disabled buttons during operations
+- Loading spinners with Lucide icons
+- Proper accessibility attributes

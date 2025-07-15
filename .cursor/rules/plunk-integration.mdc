@@ -1,0 +1,134 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Plunk Integration Guide
+
+## Overview
+Plunk is integrated for user event tracking and analytics. The system tracks authentication-related events including OTP sending, user signups, and password resets.
+
+## Core Components
+
+### Plunk Client
+The main client is in [src/lib/plunk/client.ts](mdc:src/lib/plunk/client.ts):
+- `PlunkClient` class with singleton pattern via `getPlunkClient()`
+- Base URL: `https://api.useplunk.com/v1`
+- Methods: `trackEvent()` for analytics, `sendEmail()` for transactional emails
+- Automatic API key validation and error handling
+
+### Event Tracking Functions
+Pre-defined tracking functions in [src/lib/plunk/events.ts](mdc:src/lib/plunk/events.ts):
+
+#### Email Verification OTP
+```javascript
+trackEmailVerificationOTP(email: string, otpCode: string)
+```
+- Event: `"user-otp"`
+- Subscribed: `false` (doesn't affect subscription status)
+- Data structure: `{ otp: { value: "123456", persistent: false } }`
+
+#### Password Reset OTP
+```javascript
+trackPasswordResetOTP(email: string, otpCode: string)
+```
+- Event: `"reset-otp"`
+- Subscribed: `false`
+- Data structure: `{ otp: { value: "123456", persistent: false } }`
+
+#### User Signup
+```javascript
+trackUserSignup(email: string, fullName?: string)
+```
+- Event: `"user-signup"`
+- Subscribed: `true` (new users are subscribed by default)
+- Data structure: `{ fullName: "John Doe" }`
+
+## Integration Points
+
+### Better Auth Server
+In [src/lib/auth/server.ts](mdc:src/lib/auth/server.ts):
+- `sendVerificationOTP` callback tracks OTP events automatically
+- `databaseHooks.user.create.after` tracks user signups
+- Non-blocking error handling prevents auth flow interruption
+
+### Authentication Pages
+Event tracking is integrated into:
+- [src/app/(auth)/sign-up/page.tsx](mdc:src/app/(auth)/sign-up/page.tsx) - User signup tracking
+- [src/app/(auth)/forgot-password/page.tsx](mdc:src/app/(auth)/forgot-password/page.tsx) - Password reset tracking
+
+## Event Data Standards
+
+### OTP Events
+All OTP-related events follow this structure:
+```javascript
+{
+  event: "user-otp" | "reset-otp",
+  email: "user@example.com",
+  subscribed: false,
+  data: {
+    otp: {
+      value: "123456",
+      persistent: false
+    }
+  }
+}
+```
+
+### User Events
+User-related events structure:
+```javascript
+{
+  event: "user-signup",
+  email: "user@example.com", 
+  subscribed: true,
+  data: {
+    fullName: "John Doe"
+  }
+}
+```
+
+## Environment Configuration
+
+### Required Variables
+- `PLUNK_SECRET_KEY` - API key for Plunk service
+
+### API Endpoints
+- Track Event: `POST https://api.useplunk.com/v1/track`
+- Send Email: `POST https://api.useplunk.com/v1/send`
+
+## Error Handling Strategy
+
+### Non-Blocking Approach
+All Plunk operations use try-catch blocks that:
+- Log errors to console for debugging
+- Never throw errors that could break auth flows
+- Gracefully degrade when Plunk service is unavailable
+
+### Example Pattern
+```javascript
+try {
+  await plunk.trackEvent(eventData);
+} catch (error) {
+  console.error("Failed to track event:", error);
+  // Continue execution - don't break auth flow
+}
+```
+
+## Usage Guidelines
+
+### When to Track Events
+- **Always track**: User signups, OTP sending, password resets
+- **Never track**: Sensitive data like passwords or personal information
+- **Optional**: Login events, feature usage, subscription changes
+
+### Data Privacy
+- Only track necessary data for analytics
+- Use `subscribed: false` for security-related events
+- Use `subscribed: true` for marketing-relevant events (signups, purchases)
+- Set `persistent: false` for temporary data like OTPs
+
+### Performance Considerations
+- All tracking is asynchronous and non-blocking
+- Failed tracking doesn't affect user experience
+- Consider rate limiting for high-frequency events

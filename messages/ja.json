@@ -1,0 +1,61 @@
+{
+  "Auth": {
+    "Intro": {
+      "description": "Polar.sh決済、Better Auth認証、Postgresデータベースで現代的なWebアプリケーションを構築しましょう。"
+    },
+    "SignIn": {
+      "title": "おかえりなさい",
+      "welcome": "おかえりなさい",
+      "description": "続行するにはアカウントにサインインしてください",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "signIn": "サインイン",
+      "orContinueWith": "または次で続行",
+      "noAccount": "アカウントをお持ちでない方は ",
+      "signUp": "サインアップ",
+      "forgotPassword": "パスワードをお忘れですか？",
+      "rememberMe": "ログイン状態を保持",
+      "enterOtp": "認証コードを入力",
+      "otpDescription": "メールアドレスに認証コードを送信しました",
+      "verifyAndSignIn": "認証してサインイン",
+      "backToSignIn": "サインインに戻る",
+      "resendCode": "コードを再送信",
+      "oauthClientIdNotSet": "{provider}クライアントIDが設定されていません"
+    },
+    "SignUp": {
+      "title": "アカウント作成",
+      "description": "新しいアカウントで始めましょう",
+      "name": "フルネーム",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "confirmPassword": "パスワード確認",
+      "signUp": "アカウント作成",
+      "createAccount": "アカウント作成",
+      "signIn": "サインイン",
+      "alreadyHaveAccount": "すでにアカウントをお持ちですか？ ",
+      "agreeToTerms": "利用規約とプライバシーポリシーに同意します"
+    }
+  },
+  "Dashboard": {
+    "welcome": "ダッシュボードへようこそ",
+    "navigation": {
+      "dashboard": "ダッシュボード",
+      "profile": "プロフィール",
+      "settings": "設定",
+      "logout": "ログアウト"
+    }
+  },
+  "Common": {
+    "loading": "読み込み中...",
+    "error": "何かがうまくいきませんでした",
+    "retry": "再試行",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "close": "閉じる",
+    "continue": "続行",
+    "back": "戻る",
+    "next": "次へ"
+  }
+}

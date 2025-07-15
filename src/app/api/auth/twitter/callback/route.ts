@@ -1,0 +1,66 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { twitterAuthManager } from '@/lib/auth/twitter-oauth';
+
+/**
+ * Handle Twitter OAuth callback
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+    const error = searchParams.get('error');
+
+    // Handle OAuth errors
+    if (error) {
+      console.error('Twitter OAuth error:', error);
+      const errorMessage = searchParams.get('error_description') || 'OAuth authorization failed';
+      
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/app?twitter_error=${encodeURIComponent(errorMessage)}`
+      );
+    }
+
+    // Validate required parameters
+    if (!code || !state) {
+      console.error('Missing required OAuth parameters:', { code: !!code, state: !!state });
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/app?twitter_error=${encodeURIComponent('Missing OAuth parameters')}`
+      );
+    }
+
+    // Handle the OAuth callback
+    const result = await twitterAuthManager.handleCallback(code, state);
+
+    if (!result.success) {
+      console.error('Twitter OAuth callback failed:', result.error);
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/app?twitter_error=${encodeURIComponent(result.error || 'OAuth callback failed')}`
+      );
+    }
+
+    console.log(`Successfully connected Twitter account for user: ${result.userId}`);
+    
+    // Redirect to app with success message
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/app?twitter_connected=true&account=${encodeURIComponent(result.twitterAccount?.username || '')}`
+    );
+
+  } catch (error) {
+    console.error('Error in Twitter OAuth callback:', error);
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/app?twitter_error=${encodeURIComponent('OAuth callback error')}`
+    );
+  }
+}
+
+// Handle preflight requests
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}

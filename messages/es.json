@@ -1,0 +1,61 @@
+{
+  "Auth": {
+    "Intro": {
+      "description": "Construye aplicaciones web modernas con pagos Polar.sh, autenticación Better Auth y base de datos Postgres."
+    },
+    "SignIn": {
+      "title": "Bienvenido de vuelta",
+      "welcome": "Bienvenido de vuelta",
+      "description": "Inicia sesión en tu cuenta para continuar",
+      "email": "Correo electrónico",
+      "password": "Contraseña",
+      "signIn": "Iniciar sesión",
+      "orContinueWith": "o continúa con",
+      "noAccount": "¿No tienes una cuenta? ",
+      "signUp": "Registrarse",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "rememberMe": "Recordarme",
+      "enterOtp": "Ingresa el código de verificación",
+      "otpDescription": "Hemos enviado un código de verificación a tu correo",
+      "verifyAndSignIn": "Verificar e iniciar sesión",
+      "backToSignIn": "Volver al inicio de sesión",
+      "resendCode": "Reenviar código",
+      "oauthClientIdNotSet": "El ID de cliente de {provider} no está configurado"
+    },
+    "SignUp": {
+      "title": "Crear cuenta",
+      "description": "Comienza con tu nueva cuenta",
+      "name": "Nombre completo",
+      "email": "Correo electrónico",
+      "password": "Contraseña",
+      "confirmPassword": "Confirmar contraseña",
+      "signUp": "Crear cuenta",
+      "createAccount": "Crear cuenta",
+      "signIn": "Iniciar sesión",
+      "alreadyHaveAccount": "¿Ya tienes una cuenta? ",
+      "agreeToTerms": "Acepto los Términos de Servicio y la Política de Privacidad"
+    }
+  },
+  "Dashboard": {
+    "welcome": "Bienvenido a tu panel de control",
+    "navigation": {
+      "dashboard": "Panel",
+      "profile": "Perfil",
+      "settings": "Configuración",
+      "logout": "Cerrar sesión"
+    }
+  },
+  "Common": {
+    "loading": "Cargando...",
+    "error": "Algo salió mal",
+    "retry": "Intentar de nuevo",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "close": "Cerrar",
+    "continue": "Continuar",
+    "back": "Atrás",
+    "next": "Siguiente"
+  }
+}

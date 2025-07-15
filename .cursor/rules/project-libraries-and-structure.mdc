@@ -1,0 +1,349 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Polar SaaS Kit - Project Documentation
+# Always update this whenever something is updated or added new
+
+## Project Overview
+
+**Polar SaaS Kit** is a production-ready Next.js starter for building modern SaaS applications with payments, authentication, and premium features. Built with Next.js 15, Better Auth, Polar.sh payments, and PostgreSQL with a comprehensive theming system.
+
+## Key Libraries and Dependencies
+
+### Core Framework & Runtime
+- **Next.js 15.3.2** - React framework with App Router, used for SSR and routing
+- **React 19.1.0** & **React DOM 19.1.0** - Latest React with concurrent features
+- **TypeScript 5.8.3** - Type-safe development with strict configuration
+- **Node.js >=18** - Runtime environment requirement
+
+### Authentication & Authorization
+- **better-auth 1.2.8** - Modern authentication library with session management
+- **bcrypt-ts 7.0.0** - Password hashing for credential authentication
+- **Polar.sh plugin** - Automatic customer creation and linking
+- Social providers: GitHub and Google OAuth integration
+- Session management with 7-day expiration and 1-day update cycle
+
+### Database & ORM
+- **drizzle-orm 0.41.0** - Type-safe ORM with excellent TypeScript support
+- **drizzle-kit 0.30.6** - Migration and introspection tools
+- **pg 8.16.0** - PostgreSQL driver
+- Database schemas in `src/lib/db/pg/schema.pg.ts`
+
+### Payments & Billing
+- **Polar.sh** - Payment processing and subscription management
+- Automatic customer creation on signup
+- Subscription and one-time payment support
+- Webhook handling for payment updates
+- Customer portal integration
+
+### UI Components & Styling
+- **@radix-ui/*** - Accessible headless UI primitives (dialog, dropdown, etc.)
+- **tailwindcss 4.1.8** - Utility-first CSS framework
+- **tailwind-merge 3.3.0** - Utility for merging Tailwind classes
+- **class-variance-authority 0.7.1** - Component variant management
+- **lucide-react 0.486.0** - Icon library with 1000+ SVG icons
+- **framer-motion 12.15.0** - Animation library for smooth transitions
+- **20+ custom themes** - Complete theming system with CSS custom properties
+
+### State Management & Data Fetching
+- **zustand 5.0.5** - Lightweight state management for app store
+- **swr 2.3.3** - Data fetching with caching and revalidation
+- Local storage utilities in `src/lib/browser-stroage.ts`
+
+### Internationalization
+- **next-intl 4.1.0** - Internationalization with Next.js App Router
+- Support for English, French, Spanish, Chinese, Hindi, Japanese, Korean languages
+- Translation files in `messages/` directory
+
+### Development Tools
+- **@biomejs/biome 1.9.4** - Fast linter and formatter (replaces ESLint + Prettier)
+- **tsx 4.19.4** - TypeScript execution for scripts
+- **vitest 3.1.4** - Fast unit testing framework
+- **husky 9.1.7** - Git hooks for pre-commit linting
+- **lint-staged 16.1.0** - Run linters on staged files
+
+## Directory Structure & Purpose
+
+### `/src/app` - Next.js App Router
+```
+app/
+├── (auth)/                 # Route group for authentication pages
+│   ├── forgot-password/   # Password reset page
+│   ├── sign-in/           # Sign-in page with email/password and OAuth
+│   ├── sign-up/           # Sign-up page (can be disabled via env)
+│   └── layout.tsx         # Auth layout
+├── (premium)/             # Route group for authenticated premium features
+│   ├── app/               # Main app interface with sidebar
+│   │   └── page.tsx       # Dashboard with subscription status
+│   └── layout.tsx         # Premium layout with sidebar
+├── api/                   # API routes
+│   └── auth/              # Better Auth API endpoints
+│       ├── [...all]/      # All auth routes handled by Better Auth
+│       └── actions.ts     # Auth action handlers
+├── pricing/               # Pricing page for landing
+├── privacy-policy/        # Privacy policy page
+├── terms-of-service/      # Terms of service page
+├── favicon.ico            # Site favicon
+├── layout.tsx             # Root layout with theme and i18n providers
+├── loading.tsx            # Global loading component
+├── page.tsx               # Landing page with hero, features, pricing
+├── store.ts               # Global state store
+└── globals.css            # Global Tailwind styles and theme definitions
+```
+
+### `/src/components` - React Components
+```
+components/
+├── landing/               # Landing page sections
+│   ├── hero-section.tsx          # Main hero with CTA
+│   ├── why-not-that-section.tsx  # Feature comparisons
+│   ├── interactive-demo-section.tsx # Bento grid demos
+│   ├── demo-video-section.tsx    # YouTube demo embed
+│   ├── pricing-section.tsx       # Pricing tiers with Polar integration
+│   ├── cta-section.tsx          # Call-to-action
+│   ├── faq-section.tsx          # Frequently asked questions
+│   └── footer-section.tsx       # Footer with links and social
+├── layouts/               # Layout components
+│   ├── app-sidebar.tsx           # Premium app sidebar with navigation
+│   ├── conditional-navigation.tsx # Shows nav only on public routes
+│   ├── landing-navigation.tsx    # Public site navigation
+│   └── theme-provider.tsx        # Theme context provider
+├── magicui/               # Magic UI components
+│   ├── animated-grid-pattern.tsx # Animated background patterns
+│   └── hero-video-dialog.tsx     # Video dialog for hero section
+├── ui/                    # Reusable UI primitives
+│   ├── accordion.tsx             # Collapsible content
+│   ├── alert.tsx                 # Alert notifications
+│   ├── animated-grid-pattern.tsx # Grid background animations
+│   ├── avatar.tsx                # User avatar component
+│   ├── background-paths.tsx      # SVG background patterns
+│   ├── badge.tsx                 # Status badges
+│   ├── breadcrumb.tsx            # Navigation breadcrumbs
+│   ├── button.tsx                # Button variants
+│   ├── card.tsx                  # Card layouts
+│   ├── checkbox.tsx              # Form checkboxes
+│   ├── command.tsx               # Command palette
+│   ├── dialog.tsx                # Modal dialogs
+│   ├── drawer.tsx                # Side drawers
+│   ├── dropdown-menu.tsx         # Dropdown menus
+│   ├── flip-words.tsx            # Text animation effects
+│   ├── hover-card.tsx            # Hover cards
+│   ├── input.tsx                 # Form inputs
+│   ├── json-view.tsx             # JSON data display
+│   ├── label.tsx                 # Form labels
+│   ├── language-selector.tsx     # Language selection
+│   ├── popover.tsx               # Popover components
+│   ├── radio-group.tsx           # Radio button groups
+│   ├── resizable.tsx             # Resizable panels
+│   ├── scroll-area.tsx           # Custom scrollbars
+│   ├── select.tsx                # Select dropdowns
+│   ├── separator.tsx             # Visual separators
+│   ├── shared-toast.tsx          # Toast notifications
+│   ├── sheet.tsx                 # Slide-out sheets
+│   ├── sidebar.tsx               # Aceternity sidebar component
+│   ├── skeleton.tsx              # Loading skeletons
+│   ├── sonner.tsx                # Sonner toast provider
+│   ├── switch.tsx                # Toggle switches
+│   ├── table.tsx                 # Data tables
+│   ├── tabs.tsx                  # Tab navigation
+│   ├── textarea.tsx              # Multi-line inputs
+│   ├── think.tsx                 # Thinking indicators
+│   ├── toggle.tsx                # Toggle buttons
+│   ├── tooltip.tsx               # Tooltip overlays
+│   └── various-icons.tsx         # Icon components
+├── dashboard.tsx          # Main dashboard component with stats
+├── profile.tsx            # User profile management
+└── settings.tsx           # Settings with theme selection
+```
+
+### `/src/lib` - Core Libraries & Utilities
+```
+lib/
+├── auth/                  # Authentication configuration
+│   ├── server.ts         # Better Auth server setup with Polar plugin
+│   └── client.ts         # Better Auth client setup with error filtering
+├── db/                   # Database layer
+│   ├── migrations/pg/    # Drizzle migration files
+│   ├── pg/              # PostgreSQL specific code
+│   │   ├── repositories/ # Data access layer
+│   │   │   └── user-repository.pg.ts # User data operations
+│   │   ├── schema.pg.ts  # Database schema definitions
+│   │   ├── db.pg.ts      # Database connection
+│   │   └── migrate.pg.ts # Migration runner
+│   ├── repository.ts     # Repository interface
+│   └── utils.ts          # Database utilities
+├── cache/                # Caching utilities
+│   ├── cache.interface.ts # Cache interface definition
+│   ├── cache-keys.ts     # Cache key constants
+│   ├── index.ts          # Cache exports
+│   ├── memory-cache.ts   # In-memory cache implementation
+│   ├── memory-cache.test.ts # Cache tests
+│   └── redis-cache.ts    # Redis cache implementation
+├── plunk/                # Email service integration
+│   ├── client.ts         # Plunk email client
+│   └── events.ts         # Email event handling
+├── browser-stroage.ts    # Local storage helpers
+├── const.ts              # Application constants (themes, locales)
+├── keyboard-shortcuts.ts # Global keyboard shortcuts
+├── load-env.ts           # Environment loading utilities
+├── logger.ts             # Logging configuration
+└── utils.ts              # Common utility functions
+```
+
+### `/src/hooks` - Custom React Hooks
+```
+hooks/
+├── use-copy.ts           # Copy to clipboard hook
+├── use-latest.ts         # Latest value ref hook
+├── use-mobile.ts         # Mobile detection hook
+├── use-mounted.ts        # Component mount detection
+├── use-object-state.ts   # Object state management hook
+├── use-resend-cooldown.ts # Email resend cooldown
+└── use-state-with-browserstorage.ts # State with browser storage
+```
+
+### `/src/types` - TypeScript Type Definitions
+```
+types/
+├── global.d.ts           # Global type declarations
+└── user.ts               # User and preference types
+```
+
+### `/scripts` - Build & Development Scripts
+```
+scripts/
+├── initial-env.ts        # Generate .env file from .env.example
+├── postinstall.ts        # Post-installation setup
+├── db-migrate.ts         # Database migration runner
+└── clean.ts              # Clean build artifacts
+```
+
+## Database Schema
+
+### Better-Auth Tables
+| Table | Purpose | Key Fields |
+|----|---|---|
+| **user** | User accounts | `id` (uuid), `email` (unique), `name`, `preferences` (json) |
+| **session** | User sessions | `id` (uuid), `user_id` (fk), `token` (unique), `expires_at`, `ip_address`, `user_agent` |
+| **account** | OAuth & credential accounts | `id` (uuid), `user_id` (fk), `provider_id`, `account_id`, `password`, tokens |
+| **verification** | Email verification | `id` (uuid), `identifier`, `value`, `expires_at` |
+
+### Key Relationships
+- **Users** → **Sessions** (1:many) - Authentication sessions
+- **Users** → **Accounts** (1:many) - OAuth and credential accounts
+
+## Authentication System (Better-Auth)
+
+### Configuration Location
+- **Server setup**: `src/lib/auth/server.ts`
+- **Client setup**: `src/lib/auth/client.ts`
+- **API routes**: `src/app/api/auth/[...all]/route.ts`
+
+### Supported Authentication Methods
+- **Email/Password** - Traditional credential authentication
+- **GitHub OAuth** - Social login with GitHub
+- **Google OAuth** - Social login with Google
+- **Account Linking** - Link multiple providers to one account
+
+### Session Management
+- **7-day expiration** - Sessions last for 1 week
+- **1-day update cycle** - Session expiration refreshed daily when active
+- **Secure cookies** - HTTPS-only in production (disabled for local dev)
+- **Cookie cache** - 10-minute client-side session cache
+
+### Polar Integration
+- **Automatic customer creation** on user registration
+- **Customer linking** to Better Auth user accounts
+- **Error filtering** for failed customer operations (ORDERS_LIST_FAILED suppressed)
+
+## Theme System
+
+### Available Themes (20+ variants)
+- **Base themes**: default, zinc, slate, stone, gray, blue, orange, pink
+- **Special themes**: bubblegum-pop, cyberpunk-neon, retro-arcade, tropical-paradise
+- **Premium themes**: steampunk-cogs, neon-synthwave, pastel-kawaii, space-odyssey
+- **Elegant themes**: vintage-vinyl, misty-harbor, zen-garden
+
+### CSS Custom Properties (defined in globals.css)
+```css
+--background, --foreground
+--card, --card-foreground  
+--muted, --muted-foreground
+--sidebar, --sidebar-foreground, --sidebar-border
+--primary, --secondary, --accent
+--destructive, --border, --input, --ring
+```
+
+### Theme Implementation
+- **Next-themes provider** for theme switching
+- **CSS custom properties** for consistent theming
+- **Dark/light variants** for each theme
+- **Theme selection** in settings component
+
+## Development Workflow
+
+### Getting Started
+```bash
+pnpm i                    # Install dependencies
+pnpm initial:env         # Create .env file
+pnpm docker:pg           # Start PostgreSQL (optional)
+pnpm db:migrate          # Run database migrations  
+pnpm dev                 # Start development server
+```
+
+### Common Commands
+```bash
+pnpm lint                # Run Biome linter
+pnpm format              # Format code with Biome
+pnpm test                # Run unit tests with Vitest
+pnpm db:studio           # Open Drizzle Studio
+pnpm db:push             # Push schema changes
+pnpm build               # Build for production
+```
+
+### Docker Support
+```bash
+pnpm docker-compose:up   # Start full stack with Docker
+pnpm docker:pg           # PostgreSQL only
+pnpm docker:app          # Application only
+```
+
+## Environment Configuration
+
+### Required Variables
+- **BETTER_AUTH_SECRET** - Session encryption key
+- **POSTGRES_URL** - Database connection string
+- **POLAR_ACCESS_TOKEN** - Polar.sh API token
+- **POLAR_*_PRODUCT_ID** - Product IDs for different subscription tiers
+
+### Optional Variables
+- **BETTER_AUTH_URL** - Base URL for auth callbacks
+- **DISABLE_SIGN_UP** - Disable new user registration
+- **NO_HTTPS** - Disable secure cookies for local development
+- **OAuth Credentials** - GITHUB_CLIENT_ID/SECRET, GOOGLE_CLIENT_ID/SECRET
+
+## Key Features
+
+### Premium App Experience
+- **Sidebar navigation** - Collapsible sidebar with theme-aware styling
+- **Dashboard** - Subscription status and analytics
+- **Profile management** - User profile with avatar support
+- **Settings** - Theme selection and preferences
+- **Route protection** - Premium features behind authentication
+
+### Landing Page
+- **Hero section** - Compelling value proposition
+- **Feature highlights** - Product benefits and comparisons
+- **Pricing tiers** - Integration with Polar.sh checkout
+- **FAQ section** - Common questions and answers
+- **Responsive design** - Mobile-first approach
+
+### Payment Integration
+- **Polar.sh integration** - Seamless payment processing
+- **Multiple subscription types** - Monthly, yearly, lifetime
+- **Customer management** - Automatic customer creation
+- **Error handling** - Graceful degradation for payment failures
+
+This documentation provides the foundation for understanding and contributing to the Polar SaaS Kit project. All paths are relative to the workspace root for easy navigation.

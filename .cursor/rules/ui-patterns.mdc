@@ -1,0 +1,246 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# UI Patterns and Components Guide
+
+## Overview
+This project follows consistent UI patterns for authentication flows, form handling, and user feedback. All components use modern React patterns with TypeScript and Tailwind CSS.
+
+## Form Components and Patterns
+
+### State Management
+Uses custom hook [src/hooks/use-object-state.ts](mdc:src/hooks/use-object-state.ts):
+```javascript
+const [formData, setFormData] = useObjectState({
+  email: "",
+  password: "",
+  otp: ""
+});
+
+// Update specific fields
+setFormData({ email: "user@example.com" });
+```
+
+### Resend Cooldown Hook
+Custom hook [src/hooks/use-resend-cooldown.ts](mdc:src/hooks/use-resend-cooldown.ts):
+```javascript
+const {
+  isOnCooldown,
+  formatCooldownTime,
+  startCooldown,
+} = useResendCooldown();
+
+// Usage in component
+{isOnCooldown 
+  ? `Resend in ${formatCooldownTime()}`
+  : "Didn't receive the code? Resend"
+}
+```
+
+## Authentication UI Components
+
+### Multi-Step Forms
+Pattern used in [src/app/(auth)/sign-up/page.tsx](mdc:src/app/(auth)/sign-up/page.tsx):
+- Step-based navigation with progress indicators
+- Back button functionality with proper state management
+- Conditional rendering based on current step
+- Form validation at each step
+
+### OTP Input Fields
+Standardized OTP input pattern:
+```javascript
+<Input
+  type="text"
+  placeholder="000000"
+  value={state.otp}
+  onChange={(e) => setState({ 
+    otp: e.target.value.replace(/\D/g, "").slice(0, 6) 
+  })}
+  maxLength={6}
+  className="text-center text-lg tracking-widest"
+/>
+```
+
+### Loading States
+Consistent loading pattern with Lucide icons:
+```javascript
+<Button disabled={loading}>
+  {loading && <Loader className="mr-2 h-4 w-4 animate-spin" />}
+  Button Text
+</Button>
+```
+
+## Card Layout Pattern
+
+### Standard Auth Card
+Used across all auth pages:
+```javascript
+<Card className="w-full max-w-md">
+  <CardHeader className="space-y-1">
+    <CardTitle className="text-2xl font-bold tracking-tight">
+      Page Title
+    </CardTitle>
+    <CardDescription>
+      Page description
+    </CardDescription>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    {/* Form content */}
+  </CardContent>
+</Card>
+```
+
+## Error Handling and Feedback
+
+### Toast Notifications
+Consistent error and success messaging:
+```javascript
+// Success
+toast.success("Verification code sent to your email!");
+
+// Error
+toast.error("Please enter a valid email address");
+
+// Warning
+toast.warning("Too many requests. Please try again later.");
+```
+
+### Safe Operation Pattern
+Used in [src/app/(auth)/sign-in/page.tsx](mdc:src/app/(auth)/sign-in/page.tsx):
+```javascript
+safe(() =>
+  authClient.signIn.email(credentials, {
+    onError(ctx) {
+      toast.error(ctx.error.message || "Sign in failed");
+    },
+    onSuccess() {
+      toast.success("Welcome back!");
+    },
+  })
+)
+.watch(() => setLoading(false))
+.unwrap();
+```
+
+## Input Validation Patterns
+
+### Email Validation
+```javascript
+const emailValidation = UserZodSchema.pick({ email: true }).safeParse({
+  email: formData.email,
+});
+
+if (!emailValidation.success) {
+  toast.error("Please enter a valid email address");
+  return;
+}
+```
+
+### Password Validation
+```javascript
+if (formData.password.length < 8) {
+  toast.error("Password must be at least 8 characters long");
+  return;
+}
+
+if (formData.password !== formData.confirmPassword) {
+  toast.error("Passwords do not match");
+  return;
+}
+```
+
+### OTP Validation
+```javascript
+if (!formData.otp || formData.otp.length !== 6) {
+  toast.error("Please enter the 6-digit verification code");
+  return;
+}
+```
+
+## Accessibility Patterns
+
+### Form Labels
+Always use proper labels with htmlFor attributes:
+```javascript
+<Label htmlFor="email">Email</Label>
+<Input
+  id="email"
+  type="email"
+  placeholder="Enter your email"
+  // ...
+/>
+```
+
+### Button States
+Proper disabled states and loading indicators:
+```javascript
+<Button
+  disabled={loading || !formData.email}
+  className="w-full"
+>
+  {loading && <Loader className="mr-2 h-4 w-4 animate-spin" />}
+  Send verification code
+</Button>
+```
+
+### Keyboard Navigation
+Support for Enter key submission:
+```javascript
+onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    handleSubmit();
+  }
+}}
+```
+
+## Responsive Design
+
+### Mobile-First Approach
+```javascript
+<div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
+  <Card className="w-full max-w-md">
+    {/* Content */}
+  </Card>
+</div>
+```
+
+### Breakpoint Usage
+- `px-4` on mobile, `sm:px-6` on small screens, `lg:px-8` on large screens
+- `w-full` on mobile, `max-w-md` constraint for larger screens
+
+## Animation and Transitions
+
+### Page Transitions
+```javascript
+<Card className="animate-in fade-in duration-1000">
+  {/* Content */}
+</Card>
+```
+
+### Progress Indicators
+```javascript
+<div className="h-2 w-full relative bg-input">
+  <div
+    style={{ width: `${(step / 4) * 100}%` }}
+    className="h-full bg-primary transition-all duration-300"
+  />
+</div>
+```
+
+## Component Composition
+
+### Reusable Patterns
+- Form fields wrapped in `<div className="space-y-2">`
+- Button groups with `<div className="flex gap-2">`
+- Card content with `<div className="space-y-4">`
+
+### Conditional Rendering
+Clean step-based rendering:
+```javascript
+{step === 1 && <EmailStep />}
+{step === 2 && <PasswordStep />}
+{step === 3 && <NameStep />}
+{step === 4 && <VerificationStep />}
+```
