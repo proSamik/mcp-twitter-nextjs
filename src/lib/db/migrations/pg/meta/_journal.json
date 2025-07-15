@@ -15,6 +15,13 @@
       "when": 1752557635975,
       "tag": "0001_silly_the_fallen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1752568213856,
+      "tag": "0002_handy_colossus",
+      "breakpoints": true
     }
   ]
 }

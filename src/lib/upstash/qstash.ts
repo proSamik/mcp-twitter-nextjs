@@ -258,44 +258,6 @@ export class TweetScheduler {
   }
 
   /**
-   * Schedule tweet analytics refresh
-   */
-  async scheduleAnalyticsRefresh(
-    tweetId: string,
-    intervals: number[] = [1, 6, 24, 72] // hours after posting
-  ): Promise<{ messageIds: string[] }> {
-    try {
-      const messageIds: string[] = [];
-      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/analytics`;
-
-      for (const hours of intervals) {
-        const delay = hours * 60 * 60; // Convert hours to seconds (QStash expects seconds)
-        
-        const result = await this.qstash.publishJSON({
-          url: webhookUrl,
-          body: {
-            type: 'analytics_refresh',
-            tweetId,
-            interval: hours,
-          },
-          delay,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Analytics-Refresh': 'true',
-          },
-        });
-
-        messageIds.push(result.messageId);
-      }
-
-      return { messageIds };
-    } catch (error) {
-      console.error('Error scheduling analytics refresh:', error);
-      throw new Error(`Failed to schedule analytics refresh: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
    * Schedule optimal posting time analysis
    */
   async scheduleOptimalTimeAnalysis(

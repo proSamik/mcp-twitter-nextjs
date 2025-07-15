@@ -107,16 +107,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Schedule analytics refresh only for posted tweets
-    if (status === 'posted' && twitterTweetId) {
-      try {
-        const { getTweetScheduler } = await import('@/lib/upstash/qstash');
-        await getTweetScheduler().scheduleAnalyticsRefresh(twitterTweetId);
-      } catch (error) {
-        console.warn('Failed to schedule analytics refresh:', error);
-      }
-    }
-
     const successMessage = status === 'draft' 
       ? `Successfully saved draft ${dbTweet?.nanoId}` 
       : `Successfully posted tweet ${twitterTweetId}`;

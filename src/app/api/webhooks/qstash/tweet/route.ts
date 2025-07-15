@@ -110,14 +110,6 @@ export async function POST(request: NextRequest) {
         console.warn('Failed to broadcast tweet update:', error);
       }
 
-      // Schedule analytics refresh for the posted tweet
-      const { getTweetScheduler } = await import('@/lib/upstash/qstash');
-      try {
-        await getTweetScheduler().scheduleAnalyticsRefresh(twitterTweetId);
-      } catch (error) {
-        console.warn('Failed to schedule analytics refresh:', error);
-      }
-
       console.log(`Successfully posted tweet ${tweetId} as Twitter tweet ${twitterTweetId}`);
 
       return NextResponse.json({

@@ -97,6 +97,17 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // Cancel QStash message if tweet is scheduled
+    if (tweet.status === 'scheduled' && tweet.qstashMessageId) {
+      try {
+        console.log(`Cancelling QStash message for deleted tweet: ${tweet.qstashMessageId}`);
+        await getTweetScheduler().cancelScheduledTweet(tweet.qstashMessageId);
+      } catch (error) {
+        console.warn('Failed to cancel QStash message for deleted tweet:', error);
+        // Continue with deletion even if cancellation fails
+      }
+    }
+
     // Delete the tweet
     await db
       .delete(TweetSchema)
