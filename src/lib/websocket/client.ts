@@ -295,10 +295,21 @@ export function useTweetListWebSocket(
     },
 
     onTweetUpdated: (updatedTweet: TweetEntity) => {
-      const updatedTweets = tweetsRef.current.map((tweet) =>
-        tweet.id === updatedTweet.id ? updatedTweet : tweet,
+      const existingTweetIndex = tweetsRef.current.findIndex(
+        (tweet) => tweet.id === updatedTweet.id,
       );
-      updateTweets(updatedTweets);
+      
+      if (existingTweetIndex !== -1) {
+        // Update existing tweet
+        const updatedTweets = tweetsRef.current.map((tweet) =>
+          tweet.id === updatedTweet.id ? updatedTweet : tweet,
+        );
+        updateTweets(updatedTweets);
+      } else {
+        // Add new tweet (newly created)
+        const updatedTweets = [...tweetsRef.current, updatedTweet];
+        updateTweets(updatedTweets);
+      }
     },
 
     onTweetDeleted: ({ tweetId }) => {
