@@ -173,11 +173,14 @@ export function useTaskWebSocket(
   };
 }
 
+// Global socket connection for Twitter WebSocket
+let globalTwitterSocket: Socket | null = null;
+let globalSocketUserId: string | null = null;
+
 export function useTwitterWebSocket(
   userId: string | null,
   events: TwitterWebSocketEvents = {},
 ) {
-  const socketRef = useRef<Socket | null>(null);
   const eventsRef = useRef(events);
 
   // Update events ref when events change (but don't reconnect)
@@ -186,9 +189,14 @@ export function useTwitterWebSocket(
   useEffect(() => {
     if (!userId) return;
 
-    // Only create socket if it doesn't exist
-    if (!socketRef.current) {
+    // Only create socket if it doesn't exist or if userId changed
+    if (!globalTwitterSocket || globalSocketUserId !== userId) {
       console.log("Creating new Twitter WebSocket connection for user:", userId);
+
+      // Disconnect existing socket if userId changed
+      if (globalTwitterSocket && globalSocketUserId !== userId) {
+        globalTwitterSocket.disconnect();
+      }
 
       const socket = io(
         process.env.NODE_ENV === "production"
@@ -199,7 +207,8 @@ export function useTwitterWebSocket(
         },
       );
 
-      socketRef.current = socket;
+      globalTwitterSocket = socket;
+      globalSocketUserId = userId;
 
       // Join Twitter user room
       socket.emit("join-user-room", userId);
@@ -207,17 +216,20 @@ export function useTwitterWebSocket(
       // Set up Twitter event listeners
       socket.on("tweet:created", (tweet: TweetEntity) => {
         console.log("WebSocket: Tweet created", tweet);
-        eventsRef.current.onTweetCreated?.(tweet);
+        // Notify all components that have registered event handlers
+        window.dispatchEvent(new CustomEvent("tweet:created", { detail: tweet }));
       });
 
       socket.on("tweet:updated", (tweet: TweetEntity) => {
         console.log("WebSocket: Tweet updated", tweet);
-        eventsRef.current.onTweetUpdated?.(tweet);
+        // Notify all components that have registered event handlers
+        window.dispatchEvent(new CustomEvent("tweet:updated", { detail: tweet }));
       });
 
       socket.on("tweet:deleted", (data: { tweetId: string }) => {
         console.log("WebSocket: Tweet deleted", data);
-        eventsRef.current.onTweetDeleted?.(data);
+        // Notify all components that have registered event handlers
+        window.dispatchEvent(new CustomEvent("tweet:deleted", { detail: data }));
       });
 
       socket.on("auth-error", (message: string) => {
@@ -235,14 +247,33 @@ export function useTwitterWebSocket(
       });
     }
 
+    // Set up custom event listeners for this component
+    const handleTweetCreated = (event: CustomEvent) => {
+      eventsRef.current.onTweetCreated?.(event.detail);
+    };
+
+    const handleTweetUpdated = (event: CustomEvent) => {
+      eventsRef.current.onTweetUpdated?.(event.detail);
+    };
+
+    const handleTweetDeleted = (event: CustomEvent) => {
+      eventsRef.current.onTweetDeleted?.(event.detail);
+    };
+
+    window.addEventListener("tweet:created", handleTweetCreated as EventListener);
+    window.addEventListener("tweet:updated", handleTweetUpdated as EventListener);
+    window.addEventListener("tweet:deleted", handleTweetDeleted as EventListener);
+
     return () => {
-      // Don't disconnect on unmount - keep connection alive
-      // socket.disconnect();
+      // Clean up event listeners on unmount
+      window.removeEventListener("tweet:created", handleTweetCreated as EventListener);
+      window.removeEventListener("tweet:updated", handleTweetUpdated as EventListener);
+      window.removeEventListener("tweet:deleted", handleTweetDeleted as EventListener);
     };
   }, [userId]); // Only depend on userId, not events
 
   return {
-    socket: socketRef.current,
+    socket: globalTwitterSocket,
   };
 }
 
