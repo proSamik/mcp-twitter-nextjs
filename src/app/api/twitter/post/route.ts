@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/server';
+import { getSession } from '@/lib/auth/server';
 import { twitterAuthManager } from '@/lib/auth/twitter-oauth';
 import { pgDb as db } from '@/lib/db/pg/db.pg';
 import { TweetSchema } from '@/lib/db/pg/schema.pg';
@@ -12,9 +12,7 @@ import { broadcastTweetUpdated } from '@/lib/websocket/server';
 export async function POST(request: NextRequest) {
   try {
     // Get current user session
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const session = await getSession();
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -34,7 +32,8 @@ export async function POST(request: NextRequest) {
       quoteTweetId,
       isThread,
       threadTweets,
-      saveDraft = true // Whether to save to database
+      saveDraft = true, // Whether to save to database
+      status = 'posted' // Status: 'draft' or 'posted'
     } = body;
 
     // Validate required fields
@@ -52,28 +51,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get Twitter client for the account
-    const twitterClient = await twitterAuthManager.getTwitterClient(userId, twitterAccountId);
-
-    let twitterTweetId: string;
+    let twitterTweetId: string | null = null;
     let postedTweets: any[] = [];
 
-    if (isThread && threadTweets && threadTweets.length > 1) {
-      // Post as thread
-      console.log(`Posting thread with ${threadTweets.length} tweets`);
-      const results = await twitterClient.postThread(threadTweets);
-      postedTweets = results;
-      twitterTweetId = results[0].data.id; // Use first tweet ID as primary
-    } else {
-      // Post single tweet
-      console.log(`Posting single tweet for user ${userId}`);
-      const result = await twitterClient.postTweet(content, {
-        mediaIds,
-        replyToTweetId,
-        quoteTweetId,
-      });
-      postedTweets = [result];
-      twitterTweetId = result.data.id;
+    // Only post to Twitter if it's not a draft
+    if (status !== 'draft') {
+      // Get Twitter client for the account
+      const twitterClient = await twitterAuthManager.getTwitterClient(userId, twitterAccountId);
+
+      if (isThread && threadTweets && threadTweets.length > 1) {
+        // Post as thread
+        console.log(`Posting thread with ${threadTweets.length} tweets`);
+        const results = await twitterClient.postThread(threadTweets);
+        postedTweets = results;
+        twitterTweetId = results[0].data.id; // Use first tweet ID as primary
+      } else {
+        // Post single tweet
+        console.log(`Posting single tweet for user ${userId}`);
+        const result = await twitterClient.postTweet(content, {
+          mediaIds,
+          replyToTweetId,
+          quoteTweetId,
+        });
+        postedTweets = [result];
+        twitterTweetId = result.data.id;
+      }
     }
 
     let dbTweet: any = null;
@@ -88,8 +90,8 @@ export async function POST(request: NextRequest) {
           nanoId: nanoid(8),
           content: isThread ? threadTweets.join('\n\n') : content,
           tweetType: isThread ? 'thread' : 'single',
-          status: 'posted',
-          postedAt: new Date(),
+          status: status,
+          postedAt: status === 'posted' ? new Date() : null,
           twitterTweetId,
           mediaUrls: mediaIds || [],
           hashtags: extractHashtags(content),
@@ -107,22 +109,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Schedule analytics refresh
-    try {
-      const { getTweetScheduler } = await import('@/lib/upstash/qstash');
-      await getTweetScheduler().scheduleAnalyticsRefresh(twitterTweetId);
-    } catch (error) {
-      console.warn('Failed to schedule analytics refresh:', error);
+    // Schedule analytics refresh only for posted tweets
+    if (status === 'posted' && twitterTweetId) {
+      try {
+        const { getTweetScheduler } = await import('@/lib/upstash/qstash');
+        await getTweetScheduler().scheduleAnalyticsRefresh(twitterTweetId);
+      } catch (error) {
+        console.warn('Failed to schedule analytics refresh:', error);
+      }
     }
 
-    console.log(`Successfully posted tweet ${twitterTweetId}`);
+    const successMessage = status === 'draft' 
+      ? `Successfully saved draft ${dbTweet?.nanoId}` 
+      : `Successfully posted tweet ${twitterTweetId}`;
+    console.log(successMessage);
 
     return NextResponse.json({
       success: true,
+      status,
       twitterTweetId,
       threadCount: postedTweets.length,
       dbTweet,
-      postedAt: new Date().toISOString(),
+      postedAt: status === 'posted' ? new Date().toISOString() : null,
+      draftId: status === 'draft' ? dbTweet?.nanoId : null,
     });
 
   } catch (error) {

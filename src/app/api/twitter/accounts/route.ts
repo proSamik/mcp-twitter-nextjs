@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/server';
+import { getSession } from '@/lib/auth/server';
 import { twitterAuthManager } from '@/lib/auth/twitter-oauth';
 
 /**
@@ -7,10 +7,8 @@ import { twitterAuthManager } from '@/lib/auth/twitter-oauth';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get current user session
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+      // Get current user session
+      const session = await getSession();
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -47,9 +45,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // Get current user session
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    const session = await getSession();
 
     if (!session?.user?.id) {
       return NextResponse.json(

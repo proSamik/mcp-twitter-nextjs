@@ -187,37 +187,34 @@ export function TweetComposer() {
       return;
     }
 
+    if (!selectedAccount) {
+      toast.error("Please select a Twitter account");
+      return;
+    }
+
     setSaving(true);
     try {
-      // This would typically save to drafts - for now, we'll use the MCP API
-      const response = await fetch('/api/mcp', {
+      // Use the internal Twitter API to save as draft
+      const response = await fetch('/api/twitter/post', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('apiKey') || ''}`,
         },
         body: JSON.stringify({
-          method: 'tools/call',
-          params: {
-            name: 'create_tweet',
-            arguments: {
-              content,
-              status: 'draft',
-              tweetType: 'single',
-              twitterAccountId: selectedAccount,
-            },
-          },
-          id: Date.now(),
+          content,
+          twitterAccountId: selectedAccount,
+          saveDraft: true, // Save to database but don't post to Twitter
+          status: 'draft', // Mark as draft status
         }),
       });
 
       const data = await response.json();
 
-      if (data.result && !data.error) {
+      if (data.success) {
         toast.success("Draft saved successfully!");
         setContent("");
       } else {
-        toast.error("Failed to save draft");
+        toast.error(data.error || "Failed to save draft");
       }
     } catch (error) {
       console.error('Error saving draft:', error);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/server';
+import { getSession } from '@/lib/auth/server';
 import { pgDb as db } from '@/lib/db/pg/db.pg';
 import { TweetSchema } from '@/lib/db/pg/schema.pg';
 import { eq } from 'drizzle-orm';
@@ -11,10 +11,8 @@ import { broadcastTweetUpdated } from '@/lib/websocket/server';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get current user session
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+        // Get current user session
+        const session = await getSession();
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -138,10 +136,8 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // Get current user session
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+      // Get current user session
+      const session = await getSession();
 
     if (!session?.user?.id) {
       return NextResponse.json(
