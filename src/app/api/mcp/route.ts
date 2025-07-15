@@ -12,89 +12,6 @@ import {
 import { scheduleTweetInternal } from '@/lib/twitter/schedule-tweet';
 import { postTweetInternal } from '@/lib/twitter/post-tweet';
 
-/**
- * Get today's date and time information for the caller's timezone.
- */
-async function getTodaysDate(args: { timezone?: string }) {
-  try {
-    const { timezone } = args;
-    const now = new Date();
-
-    // Use provided timezone or default to UTC
-    const timeZone = timezone || "UTC";
-
-    // Format date in various useful formats
-    const dateInfo = {
-      iso: now.toISOString(),
-      date: now.toISOString().split("T")[0], // YYYY-MM-DD format
-      time: now.toISOString().split("T")[1].split(".")[0], // HH:MM:SS format
-      timestamp: now.getTime(),
-      timezone: timeZone,
-      localDate: timezone
-        ? new Intl.DateTimeFormat("en-CA", {
-            timeZone: timezone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          }).format(now)
-        : now.toISOString().split("T")[0],
-      localTime: timezone
-        ? new Intl.DateTimeFormat("en-GB", {
-            timeZone: timezone,
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          }).format(now)
-        : now.toISOString().split("T")[1].split(".")[0],
-      localDateTime: timezone
-        ? new Intl.DateTimeFormat("en-CA", {
-            timeZone: timezone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          })
-            .format(now)
-            .replace(", ", " ")
-        : now.toISOString().replace("T", " ").split(".")[0],
-      weekday: timezone
-        ? new Intl.DateTimeFormat("en-US", {
-            timeZone: timezone,
-            weekday: "long",
-          }).format(now)
-        : new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(now),
-      month: timezone
-        ? new Intl.DateTimeFormat("en-US", {
-            timeZone: timezone,
-            month: "long",
-          }).format(now)
-        : new Intl.DateTimeFormat("en-US", { month: "long" }).format(now),
-    };
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Current date and time information:\n\n${JSON.stringify(dateInfo, null, 2)}`,
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
 
 /**
  * List all tweets for the authenticated user.
@@ -390,6 +307,8 @@ async function deleteTweet(args: any, userId: string) {
       .select({
         id: TweetSchema.id,
         nanoId: TweetSchema.nanoId,
+        status: TweetSchema.status,
+        qstashMessageId: TweetSchema.qstashMessageId,
       })
       .from(TweetSchema)
       .where(and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)))
@@ -397,6 +316,18 @@ async function deleteTweet(args: any, userId: string) {
 
     if (!tweet) {
       throw new Error(`Tweet with nanoId "${nanoId}" not found`);
+    }
+
+    // Cancel QStash message if it's a scheduled tweet
+    if (tweet.status === 'scheduled' && tweet.qstashMessageId) {
+      try {
+        const { getTweetScheduler } = await import('@/lib/upstash/qstash');
+        console.log(`Cancelling QStash message: ${tweet.qstashMessageId}`);
+        await getTweetScheduler().cancelScheduledTweet(tweet.qstashMessageId);
+      } catch (error) {
+        console.warn('Failed to cancel QStash message:', error);
+        // Continue with deletion even if QStash cancellation fails
+      }
     }
 
     // Delete the tweet
@@ -851,28 +782,11 @@ export async function POST(request: NextRequest) {
           jsonrpc: "2.0",
           result: {
             tools: [
-              // today's date
-              {
-                name: "todays_date",
-                description:
-                  "Get current date and time information in caller's timezone",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    timezone: {
-                      type: "string",
-                      description:
-                        "IANA timezone name (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-                    },
-                  },
-                  required: [],
-                },
-              },
               // list tweets
               {
                 name: "list_tweets",
                 description:
-                  "List all tweets for the authenticated user",
+                  "🔍 LIST TWEETS: Get all tweets for the authenticated user. Use this to view existing tweets before creating new ones or to check tweet statuses. Essential for managing tweet content.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -893,7 +807,7 @@ export async function POST(request: NextRequest) {
               {
                 name: "create_tweet",
                 description:
-                  "Create a new tweet or draft for the authenticated user",
+                  "✍️ CREATE TWEET: Create a new tweet or draft for the authenticated user. Use this to create content that can be posted immediately or saved as a draft for later scheduling. Do NOT use this for scheduling - use convert_draft_to_scheduled instead!",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -945,7 +859,7 @@ export async function POST(request: NextRequest) {
               {
                 name: "schedule_tweet",
                 description:
-                  "Schedule an existing tweet for posting at a specific time",
+                  "⏰ SCHEDULE EXISTING TWEET: Schedule an existing DRAFT tweet for posting at a specific time. Only works with tweets that have status='draft'. Use this to schedule drafts.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -970,7 +884,7 @@ export async function POST(request: NextRequest) {
               // delete tweets
               {
                 name: "delete_tweet",
-                description: "Delete a tweet by nanoId (authenticated user)",
+                description: "🗑️ DELETE TWEET: Permanently delete a tweet by nanoId. Works for drafts, scheduled tweets (will cancel QStash scheduling), and posted tweets. Use this to remove unwanted content.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -985,7 +899,7 @@ export async function POST(request: NextRequest) {
               // post tweet
               {
                 name: "post_tweet",
-                description: "Convert a draft tweet to posted (immediately post to Twitter)",
+                description: "🚀 POST TWEET NOW: Immediately post a DRAFT tweet to Twitter. Only works with tweets that have status='draft'. Use this to publish content right away.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -1000,7 +914,7 @@ export async function POST(request: NextRequest) {
               // reschedule tweet
               {
                 name: "reschedule_tweet",
-                description: "Reschedule an existing scheduled tweet to a new time",
+                description: "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -1025,7 +939,7 @@ export async function POST(request: NextRequest) {
               // convert draft to scheduled
               {
                 name: "convert_draft_to_scheduled",
-                description: "Convert a draft tweet to a scheduled tweet",
+                description: "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -1050,7 +964,7 @@ export async function POST(request: NextRequest) {
               // convert draft to posted
               {
                 name: "convert_draft_to_posted",
-                description: "Convert a draft tweet to posted (immediately post to Twitter)",
+                description: "📢 CONVERT DRAFT TO POSTED: Transform a DRAFT tweet into a POSTED tweet (immediately publish to Twitter). This is the PREFERRED way to post new content - first create a draft, then convert it to posted.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -1074,9 +988,6 @@ export async function POST(request: NextRequest) {
           // Execute tools directly based on their name
           let result: any;
           switch (toolName) {
-            case "todays_date":
-              result = await getTodaysDate(toolArgs);
-              break;
             case "list_tweets":
               result = await listTweets(toolArgs, user.userId);
               break;

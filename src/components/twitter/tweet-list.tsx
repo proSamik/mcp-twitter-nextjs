@@ -24,6 +24,7 @@ import { TweetEntity } from "@/lib/db/pg/schema.pg";
 import { useTweetListWebSocket } from "@/lib/websocket/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { TweetEmbed } from "./tweet-embed";
 
 interface TweetListProps {
   userId: string;
@@ -227,7 +228,7 @@ export function TweetList({ userId }: TweetListProps) {
   const posted = sortedTweets.filter(tweet => tweet.status === 'posted');
 
   const TweetCard = ({ tweet }: { tweet: TweetEntity }) => (
-    <Card key={tweet.id} className="hover:shadow-md transition-shadow">
+    <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
@@ -281,6 +282,18 @@ export function TweetList({ userId }: TweetListProps) {
       </CardHeader>
       <CardContent>
         <p className="text-sm mb-3 whitespace-pre-wrap">{tweet.content}</p>
+        
+        {/* Show embedded tweet for posted tweets */}
+        {tweet.status === 'posted' && tweet.twitterTweetId && (
+          <div className="mb-4">
+            <TweetEmbed 
+              tweetId={tweet.twitterTweetId}
+              tweetContent={tweet.content}
+              showPreview={false}
+              className="mb-3"
+            />
+          </div>
+        )}
         
         <div className="space-y-2">
           {tweet.hashtags && tweet.hashtags.length > 0 && (
@@ -367,7 +380,7 @@ export function TweetList({ userId }: TweetListProps) {
                 <p>No tweets yet. Start by composing your first tweet!</p>
               </div>
             ) : (
-              sortedTweets.map(tweet => <TweetCard key={tweet.id} tweet={tweet} />)
+              sortedTweets.map(tweet => <TweetCard key={tweet.nanoId} tweet={tweet} />)
             )}
           </TabsContent>
           
@@ -378,7 +391,7 @@ export function TweetList({ userId }: TweetListProps) {
                 <p>No drafts saved.</p>
               </div>
             ) : (
-              drafts.map(tweet => <TweetCard key={tweet.id} tweet={tweet} />)
+              drafts.map(tweet => <TweetCard key={tweet.nanoId} tweet={tweet} />)
             )}
           </TabsContent>
           
@@ -389,7 +402,7 @@ export function TweetList({ userId }: TweetListProps) {
                 <p>No scheduled tweets.</p>
               </div>
             ) : (
-              scheduled.map(tweet => <TweetCard key={tweet.id} tweet={tweet} />)
+              scheduled.map(tweet => <TweetCard key={tweet.nanoId} tweet={tweet} />)
             )}
           </TabsContent>
           
@@ -400,7 +413,7 @@ export function TweetList({ userId }: TweetListProps) {
                 <p>No posted tweets.</p>
               </div>
             ) : (
-              posted.map(tweet => <TweetCard key={tweet.id} tweet={tweet} />)
+              posted.map(tweet => <TweetCard key={tweet.nanoId} tweet={tweet} />)
             )}
           </TabsContent>
         </Tabs>

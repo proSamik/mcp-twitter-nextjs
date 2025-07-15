@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "ui/card";
+import { Card } from "ui/card";
 import { Button } from "ui/button";
 import { Textarea } from "ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "ui/select";
 import { Input } from "ui/input";
 import { Badge } from "ui/badge";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "ui/accordion";
 import { Send, Calendar as CalendarIcon, Clock, Hash, AtSign, Save } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -268,147 +269,153 @@ export function TweetComposer({ userId }: TweetComposerProps = {}) {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Send className="h-5 w-5 text-primary" />
-          <CardTitle>Tweet Composer</CardTitle>
-        </div>
-        <CardDescription>
-          Create and schedule your tweets
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Account Selection */}
-        {accounts.length > 0 && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Account</label>
-            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select account" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    @{account.username} ({account.displayName})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Tweet Content */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">What&apos;s happening?</label>
-            <span className={`text-sm ${getCharacterColor(characterCount)}`}>
-              {characterCount}/280
-            </span>
-          </div>
-          <Textarea
-            placeholder="What's happening?"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="min-h-[120px] resize-none"
-            maxLength={300} // Allow slightly over for better UX
-          />
-        </div>
-
-        {/* Hashtags and Mentions */}
-        {(hashtags.length > 0 || mentions.length > 0) && (
-          <div className="space-y-2">
-            {hashtags.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Hash className="h-4 w-4 text-muted-foreground" />
-                {hashtags.map((tag, index) => (
-                  <Badge key={index} variant="secondary">
-                    #{tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            {mentions.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <AtSign className="h-4 w-4 text-muted-foreground" />
-                {mentions.map((mention, index) => (
-                  <Badge key={index} variant="outline">
-                    @{mention}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Scheduling Options */}
-        {isScheduled && (
-          <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+      <Accordion type="single" collapsible defaultValue="composer">
+        <AccordionItem value="composer">
+          <AccordionTrigger className="px-6 py-4">
             <div className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4" />
-              <span className="text-sm font-medium">Schedule Tweet</span>
+              <Send className="h-5 w-5 text-primary" />
+              <div>
+                <div className="text-lg font-semibold">Tweet Composer</div>
+                <div className="text-sm text-muted-foreground">Create and schedule your tweets</div>
+              </div>
             </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm">Schedule for:</label>
-              <Input
-                type="datetime-local"
-                value={scheduleDateTime}
-                onChange={e => setScheduleDateTime(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
-                className="w-full"
-              />
+          </AccordionTrigger>
+          <AccordionContent>
+            <div className="px-6 pb-6 space-y-4">
+              {/* Account Selection */}
+              {accounts.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Account</label>
+                  <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          @{account.username} ({account.displayName})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Tweet Content */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">What&apos;s happening?</label>
+                  <span className={`text-sm ${getCharacterColor(characterCount)}`}>
+                    {characterCount}/280
+                  </span>
+                </div>
+                <Textarea
+                  placeholder="What's happening?"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="min-h-[120px] resize-none"
+                  maxLength={300} // Allow slightly over for better UX
+                />
+              </div>
+
+              {/* Hashtags and Mentions */}
+              {(hashtags.length > 0 || mentions.length > 0) && (
+                <div className="space-y-2">
+                  {hashtags.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Hash className="h-4 w-4 text-muted-foreground" />
+                      {hashtags.map((tag, index) => (
+                        <Badge key={index} variant="secondary">
+                          #{tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {mentions.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <AtSign className="h-4 w-4 text-muted-foreground" />
+                      {mentions.map((mention, index) => (
+                        <Badge key={index} variant="outline">
+                          @{mention}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Scheduling Options */}
+              {isScheduled && (
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="h-4 w-4" />
+                    <span className="text-sm font-medium">Schedule Tweet</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm">Schedule for:</label>
+                    <Input
+                      type="datetime-local"
+                      value={scheduleDateTime}
+                      onChange={e => setScheduleDateTime(e.target.value)}
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-4">
+                <Button
+                  onClick={handleSaveDraft}
+                  variant="outline"
+                  disabled={!content.trim() || saving}
+                  className="flex-1"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {saving ? "Saving..." : "Save Draft"}
+                </Button>
+                
+                <Button
+                  onClick={() => setIsScheduled(!isScheduled)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  {isScheduled ? "Cancel Schedule" : "Schedule"}
+                </Button>
+                
+                {isScheduled ? (
+                  <Button
+                    onClick={handleScheduleTweet}
+                    disabled={!content.trim() || !selectedAccount || !scheduleDateTime || scheduling}
+                    className="flex-1"
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {scheduling ? "Scheduling..." : "Schedule Tweet"}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handlePostNow}
+                    disabled={!content.trim() || !selectedAccount || posting || characterCount > 280}
+                    className="flex-1"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    {posting ? "Posting..." : "Post Now"}
+                  </Button>
+                )}
+              </div>
+
+              {accounts.length === 0 && (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  Please connect a Twitter account to start composing tweets
+                </div>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-2 pt-4">
-          <Button
-            onClick={handleSaveDraft}
-            variant="outline"
-            disabled={!content.trim() || saving}
-            className="flex-1"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? "Saving..." : "Save Draft"}
-          </Button>
-          
-          <Button
-            onClick={() => setIsScheduled(!isScheduled)}
-            variant="outline"
-            className="flex-1"
-          >
-            <Clock className="h-4 w-4 mr-2" />
-            {isScheduled ? "Cancel Schedule" : "Schedule"}
-          </Button>
-          
-          {isScheduled ? (
-            <Button
-              onClick={handleScheduleTweet}
-              disabled={!content.trim() || !selectedAccount || !scheduleDateTime || scheduling}
-              className="flex-1"
-            >
-              <CalendarIcon className="h-4 w-4 mr-2" />
-              {scheduling ? "Scheduling..." : "Schedule Tweet"}
-            </Button>
-          ) : (
-            <Button
-              onClick={handlePostNow}
-              disabled={!content.trim() || !selectedAccount || posting || characterCount > 280}
-              className="flex-1"
-            >
-              <Send className="h-4 w-4 mr-2" />
-              {posting ? "Posting..." : "Post Now"}
-            </Button>
-          )}
-        </div>
-
-        {accounts.length === 0 && (
-          <div className="text-center py-4 text-sm text-muted-foreground">
-            Please connect a Twitter account to start composing tweets
-          </div>
-        )}
-      </CardContent>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </Card>
   );
 }
