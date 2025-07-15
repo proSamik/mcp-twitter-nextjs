@@ -5,9 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Core Development
-- `pnpm dev` - Start development server with Turbopack (fast refresh)
+- `pnpm dev` - Start development server with custom server (tsx src/server.ts)
+- `pnpm dev:turbo` - Start development server with Turbopack (fast refresh)
 - `pnpm build` - Build for production
-- `pnpm start` - Start production server
+- `pnpm start` - Start production server (tsx src/server.ts)
 - `pnpm build:local` - Build for local environment (NO_HTTPS=1)
 
 ### Code Quality
@@ -26,11 +27,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `pnpm db:push` - Push schema changes directly (development only)
 - `pnpm db:studio` - Open Drizzle Studio for database management
 - `pnpm db:reset` - Drop all tables and push schema (destructive)
+- `pnpm db:pull` - Pull schema from database
+- `pnpm db:check` - Check migration files
+
+### Docker Operations
+- `pnpm docker-compose:up` - Start Docker containers with build
+- `pnpm docker-compose:down` - Stop Docker containers
+- `pnpm docker-compose:logs` - View Docker logs
+- `pnpm docker-compose:ps` - Show running containers
+- `pnpm docker-compose:update` - Pull latest code and rebuild containers
+- `pnpm docker:pg` - Run PostgreSQL in Docker container
+- `pnpm docker:app` - Build and run app in Docker container
 
 ### Setup & Utilities
 - `pnpm initial:env` - Generate .env from .env.example
 - `pnpm postinstall` - Post-installation setup script
 - `pnpm clean` - Clean build artifacts
+- `pnpm prepare` - Husky pre-commit hooks setup
 
 ## Architecture Overview
 
@@ -49,8 +62,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Key Directories
 - `src/app/` - Next.js App Router with route groups:
-  - `(auth)/` - Public authentication pages
-  - `(premium)/` - Protected premium features including Twitter dashboard
+  - `(auth)/` - Public authentication pages (sign-in, sign-up, forgot-password)
+  - `(premium)/` - Protected premium features (app dashboard, api-keys)
+  - `(psec)/` - Protected secure routes with dynamic slug handling
   - `api/` - API routes for Twitter integration, webhooks, and MCP
 - `src/components/` - React components organized by feature:
   - `twitter/` - Twitter-specific components (ConnectedAccounts, TweetComposer)
@@ -59,8 +73,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `src/lib/` - Core libraries:
   - `twitter/` - Twitter API client and utilities
   - `upstash/` - Redis caching and QStash scheduling
-  - `auth/` - Authentication including Twitter OAuth
-  - `db/` - Database schemas and utilities
+  - `auth/` - Authentication including Twitter OAuth and API keys
+  - `db/` - Database schemas, repositories, and utilities
+  - `cache/` - Caching interface and memory cache
+  - `websocket/` - WebSocket server and client for real-time updates
+  - `polar/` - Polar.sh payment integration
+  - `plunk/` - Email service integration
 - `src/hooks/` - Custom React hooks
 - `scripts/` - Build and utility scripts
 

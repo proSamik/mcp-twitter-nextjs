@@ -319,8 +319,11 @@ Upstash provides Redis for caching and QStash for reliable tweet scheduling. Bot
 
 Common commands:
 ```bash
-# Start the development server
+# Start the development server (custom server)
 pnpm dev
+
+# Or start with Turbopack for faster development
+pnpm dev:turbo
 
 # Open your browser
 # http://localhost:3000
@@ -329,18 +332,26 @@ pnpm dev
 ## 🏗️ Project Structure
 
 ```
-polar-saaskit/
+mcp-twitter-nextjs/
 ├── 📁 src/
 │   ├── 📁 app/                     # Next.js App Router
 │   │   ├── 📁 (auth)/             # Public authentication pages
 │   │   │   ├── sign-in/           # Sign in page
-│   │   │   └── sign-up/           # Sign up page  
+│   │   │   ├── sign-up/           # Sign up page
+│   │   │   └── forgot-password/   # Password reset
 │   │   ├── 📁 (premium)/          # Protected premium features
-│   │   │   ├── app/               # Main app interface
+│   │   │   ├── app/               # Main Twitter dashboard
 │   │   │   │   └── page.tsx       # Dashboard with sidebar
+│   │   │   ├── api-keys/          # API key management
 │   │   │   └── layout.tsx         # Premium layout
+│   │   ├── 📁 (psec)/             # Protected secure routes
+│   │   │   └── [slug]/            # Dynamic slug pages
 │   │   ├── 📁 api/                # API routes
-│   │   │   └── auth/              # Better Auth endpoints
+│   │   │   ├── auth/              # Better Auth + Twitter OAuth
+│   │   │   ├── twitter/           # Twitter management endpoints
+│   │   │   ├── mcp/               # Claude MCP server
+│   │   │   ├── api-keys/          # API key management
+│   │   │   └── webhooks/          # QStash webhooks
 │   │   ├── pricing/               # Landing page pricing
 │   │   ├── page.tsx               # Landing page
 │   │   └── layout.tsx             # Root layout
@@ -348,19 +359,37 @@ polar-saaskit/
 │   │   ├── 📁 ui/                 # Reusable UI components
 │   │   ├── 📁 layouts/            # Layout components
 │   │   ├── 📁 landing/            # Landing page sections
+│   │   ├── 📁 twitter/            # Twitter-specific components
+│   │   │   ├── connected-accounts.tsx
+│   │   │   ├── tweet-composer.tsx
+│   │   │   ├── tweet-list.tsx
+│   │   │   └── tweet-embed.tsx
+│   │   ├── 📁 api-keys/           # API key management
 │   │   ├── dashboard.tsx          # Dashboard with stats
 │   │   ├── profile.tsx            # User profile
 │   │   └── settings.tsx           # Settings with themes
 │   ├── 📁 lib/                    # Core libraries
-│   │   ├── 📁 auth/               # Authentication config
-│   │   ├── 📁 db/                 # Database & migrations
+│   │   ├── 📁 auth/               # Authentication & API keys
+│   │   ├── 📁 db/                 # Database & repositories
+│   │   ├── 📁 twitter/            # Twitter API client
+│   │   ├── 📁 upstash/            # Redis & QStash
+│   │   ├── 📁 websocket/          # Real-time updates
+│   │   ├── 📁 polar/              # Payment integration
+│   │   ├── 📁 cache/              # Caching utilities
 │   │   ├── utils.ts               # Utility functions
 │   │   └── const.ts               # App constants
-│   └── 📁 types/                  # TypeScript definitions
-├── 📁 messages/                   # Internationalization
+│   ├── 📁 hooks/                  # Custom React hooks
+│   ├── 📁 i18n/                   # Internationalization
+│   ├── 📁 types/                  # TypeScript definitions
+│   ├── middleware.ts              # Route middleware
+│   └── server.ts                  # Custom server
+├── 📁 messages/                   # i18n message files
 ├── 📁 public/                     # Static assets
 ├── 📁 docker/                     # Docker configuration
-└── 📁 scripts/                    # Build scripts
+├── 📁 scripts/                    # Build and utility scripts
+├── .cursorrules                   # Cursor IDE rules
+├── CLAUDE.md                      # Claude Code instructions
+└── README-MCP.md                  # MCP integration guide
 ```
 
 ## 🎨 Theme System
@@ -448,11 +477,13 @@ pnpm start
 
 ### Core Commands
 ```bash
-pnpm dev                  # Start development server
+pnpm dev                  # Start development server (custom server)
+pnpm dev:turbo           # Start development server with Turbopack
 pnpm build               # Build for production  
 pnpm start               # Start production server
 pnpm lint                # Run Biome linter
 pnpm format              # Format code
+pnpm check-types         # TypeScript type checking
 ```
 
 ### Database Commands
@@ -461,6 +492,9 @@ pnpm db:generate         # Generate new migrations
 pnpm db:migrate          # Run pending migrations
 pnpm db:studio           # Open Drizzle Studio
 pnpm db:push            # Push schema changes (dev only)
+pnpm db:pull            # Pull schema from database
+pnpm db:check           # Check migration files
+pnpm db:reset           # Drop all tables and push schema (destructive)
 ```
 
 ### Docker Commands
@@ -469,6 +503,9 @@ pnpm docker:pg           # Start PostgreSQL only
 pnpm docker:app          # Start app only
 pnpm docker-compose:up   # Start full stack
 pnpm docker-compose:down # Stop all services
+pnpm docker-compose:logs # View Docker logs
+pnpm docker-compose:ps   # Show running containers
+pnpm docker-compose:update # Pull latest and rebuild
 ```
 
 ### Utility Commands
@@ -476,9 +513,270 @@ pnpm docker-compose:down # Stop all services
 pnpm initial:env         # Generate .env from .env.example
 pnpm postinstall         # Post-installation setup
 pnpm clean               # Clean build artifacts
+pnpm prepare             # Setup Husky pre-commit hooks
+pnpm test                # Run tests with Vitest
+pnpm test:watch          # Run tests in watch mode
 ```
 
 ## 🏛️ Architecture
+
+### System Data Flow
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        UI[React UI Components]
+        WS_CLIENT[WebSocket Client]
+        COMPOSER[Tweet Composer]
+        ACCOUNTS[Connected Accounts]
+    end
+
+    subgraph "Next.js App Router"
+        AUTH_PAGES["(auth) Routes<br/>Sign In/Up"]
+        PREMIUM_PAGES["(premium) Routes<br/>Dashboard, API Keys"]
+        PSEC_PAGES["(psec) Routes<br/>Dynamic Secure Pages"]
+    end
+
+    subgraph "API Layer"
+        AUTH_API[Auth API<br/>/api/auth]
+        TWITTER_API[Twitter API<br/>/api/twitter]
+        MCP_API[MCP API<br/>/api/mcp]
+        WEBHOOKS[Webhooks<br/>/api/webhooks]
+    end
+
+    subgraph "Authentication & Authorization"
+        BETTER_AUTH[Better Auth]
+        API_KEYS[API Key Auth]
+        TWITTER_OAUTH[Twitter OAuth]
+        GOOGLE_OAUTH[Google OAuth]
+    end
+
+    subgraph "Database Layer"
+        POSTGRES[(PostgreSQL)]
+        USER_TABLE[Users]
+        SESSION_TABLE[Sessions]
+        TWITTER_ACC_TABLE[Twitter Accounts]
+        TWEETS_TABLE[Tweets]
+        API_KEYS_TABLE[API Keys]
+    end
+
+    subgraph "External Services"
+        TWITTER_API_V2[Twitter API v2]
+        UPSTASH_REDIS[Upstash Redis<br/>Caching]
+        UPSTASH_QSTASH[Upstash QStash<br/>Scheduling]
+        POLAR[Polar.sh<br/>Payments]
+    end
+
+    subgraph "Claude Integration"
+        MCP_SERVER[MCP Server]
+        CLAUDE[Claude AI]
+    end
+
+    subgraph "Real-time Layer"
+        WS_SERVER[WebSocket Server]
+        SOCKET_IO[Socket.IO]
+    end
+
+    %% User Interactions
+    UI --> AUTH_PAGES
+    UI --> PREMIUM_PAGES
+    UI --> PSEC_PAGES
+    COMPOSER --> TWITTER_API
+    ACCOUNTS --> TWITTER_API
+    WS_CLIENT <--> WS_SERVER
+
+    %% API Routes
+    AUTH_PAGES --> AUTH_API
+    PREMIUM_PAGES --> TWITTER_API
+    PREMIUM_PAGES --> MCP_API
+
+    %% Authentication Flow
+    AUTH_API --> BETTER_AUTH
+    BETTER_AUTH --> GOOGLE_OAUTH
+    BETTER_AUTH --> TWITTER_OAUTH
+    MCP_API --> API_KEYS
+    
+    %% Twitter Integration
+    TWITTER_API --> TWITTER_OAUTH
+    TWITTER_API --> TWITTER_API_V2
+    TWITTER_API --> UPSTASH_REDIS
+    TWITTER_API --> UPSTASH_QSTASH
+
+    %% Database Operations
+    BETTER_AUTH --> POSTGRES
+    TWITTER_API --> POSTGRES
+    API_KEYS --> POSTGRES
+    
+    POSTGRES --> USER_TABLE
+    POSTGRES --> SESSION_TABLE
+    POSTGRES --> TWITTER_ACC_TABLE
+    POSTGRES --> TWEETS_TABLE
+    POSTGRES --> API_KEYS_TABLE
+
+    %% Scheduled Operations
+    UPSTASH_QSTASH --> WEBHOOKS
+    WEBHOOKS --> TWITTER_API_V2
+    WEBHOOKS --> POSTGRES
+
+    %% MCP Integration
+    MCP_API --> MCP_SERVER
+    MCP_SERVER --> CLAUDE
+    MCP_SERVER --> POSTGRES
+
+    %% Real-time Updates
+    TWITTER_API --> WS_SERVER
+    WS_SERVER --> SOCKET_IO
+    SOCKET_IO --> WS_CLIENT
+
+    %% Payment Flow
+    PREMIUM_PAGES --> POLAR
+    POLAR --> WEBHOOKS
+
+    %% Caching Layer
+    TWITTER_API_V2 --> UPSTASH_REDIS
+    SESSION_TABLE --> UPSTASH_REDIS
+
+    style UI fill:#e1f5fe
+    style POSTGRES fill:#f3e5f5
+    style TWITTER_API_V2 fill:#e8f5e8
+    style CLAUDE fill:#fff3e0
+    style UPSTASH_REDIS fill:#fce4ec
+    style UPSTASH_QSTASH fill:#fce4ec
+```
+
+### Tweet Lifecycle Flow
+
+```mermaid
+graph LR
+    subgraph "Tweet Creation"
+        DRAFT[Draft Creation]
+        COMPOSE[Tweet Composer]
+        VALIDATE[Content Validation]
+    end
+
+    subgraph "Processing Options"
+        IMMEDIATE[Post Immediately]
+        SCHEDULE[Schedule for Later]
+        SAVE_DRAFT[Save as Draft]
+    end
+
+    subgraph "Scheduling System"
+        QSTASH[QStash Queue]
+        WEBHOOK[Webhook Handler]
+        RETRY[Retry Logic]
+    end
+
+    subgraph "Twitter API"
+        POST_TWEET[Post to Twitter]
+        TWITTER_RESPONSE[Twitter Response]
+        RATE_LIMIT[Rate Limiting]
+    end
+
+    subgraph "Database Updates"
+        UPDATE_STATUS[Update Tweet Status]
+        ANALYTICS[Store Analytics]
+        CACHE_UPDATE[Update Cache]
+    end
+
+    subgraph "Real-time Updates"
+        WEBSOCKET[WebSocket Broadcast]
+        UI_UPDATE[UI Update]
+    end
+
+    DRAFT --> COMPOSE
+    COMPOSE --> VALIDATE
+    VALIDATE --> IMMEDIATE
+    VALIDATE --> SCHEDULE
+    VALIDATE --> SAVE_DRAFT
+
+    IMMEDIATE --> POST_TWEET
+    SCHEDULE --> QSTASH
+    QSTASH --> WEBHOOK
+    WEBHOOK --> POST_TWEET
+    POST_TWEET --> RATE_LIMIT
+    RATE_LIMIT --> TWITTER_RESPONSE
+    TWITTER_RESPONSE --> UPDATE_STATUS
+
+    UPDATE_STATUS --> ANALYTICS
+    ANALYTICS --> CACHE_UPDATE
+    CACHE_UPDATE --> WEBSOCKET
+    WEBSOCKET --> UI_UPDATE
+
+    WEBHOOK --> RETRY
+    RETRY --> POST_TWEET
+
+    style DRAFT fill:#e3f2fd
+    style POST_TWEET fill:#e8f5e8
+    style QSTASH fill:#fce4ec
+    style WEBSOCKET fill:#fff3e0
+```
+
+### Authentication & Authorization Flow
+
+```mermaid
+graph TD
+    subgraph "User Access"
+        USER[User]
+        LOGIN[Login Page]
+        DASHBOARD[Dashboard]
+        API_ACCESS[API Access]
+    end
+
+    subgraph "Authentication Methods"
+        EMAIL_AUTH[Email/Password]
+        GOOGLE_AUTH[Google OAuth]
+        TWITTER_AUTH[Twitter OAuth]
+        API_KEY_AUTH[API Key Auth]
+    end
+
+    subgraph "Session Management"
+        SESSION[Session Creation]
+        JWT[JWT Tokens]
+        REDIS_SESSION[Redis Session Store]
+    end
+
+    subgraph "Authorization Checks"
+        ROUTE_GUARD[Route Protection]
+        PREMIUM_CHECK[Premium Access Check]
+        API_RATE_LIMIT[API Rate Limiting]
+    end
+
+    subgraph "Database"
+        USER_DB[Users Table]
+        SESSION_DB[Sessions Table]
+        ACCOUNT_DB[Accounts Table]
+        API_KEY_DB[API Keys Table]
+    end
+
+    USER --> LOGIN
+    LOGIN --> EMAIL_AUTH
+    LOGIN --> GOOGLE_AUTH
+    LOGIN --> TWITTER_AUTH
+
+    EMAIL_AUTH --> SESSION
+    GOOGLE_AUTH --> SESSION
+    TWITTER_AUTH --> SESSION
+
+    API_ACCESS --> API_KEY_AUTH
+    API_KEY_AUTH --> API_KEY_DB
+
+    SESSION --> JWT
+    JWT --> REDIS_SESSION
+    SESSION --> SESSION_DB
+
+    DASHBOARD --> ROUTE_GUARD
+    ROUTE_GUARD --> PREMIUM_CHECK
+    API_ACCESS --> API_RATE_LIMIT
+
+    EMAIL_AUTH --> USER_DB
+    GOOGLE_AUTH --> ACCOUNT_DB
+    TWITTER_AUTH --> ACCOUNT_DB
+
+    style USER fill:#e1f5fe
+    style SESSION fill:#f3e5f5
+    style API_KEY_AUTH fill:#fff3e0
+    style PREMIUM_CHECK fill:#e8f5e8
+```
 
 ### Authentication Flow
 1. **User signs up/in** → Better Auth handles authentication
@@ -589,9 +887,9 @@ curl -X POST https://your-domain.com/api/mcp \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "list_tasks",
+    "method": "list_tweets",
     "params": {
-      "date": "2024-06-20"
+      "status": "draft"
     }
   }'
 ```
@@ -603,12 +901,12 @@ curl -X POST https://your-domain.com/api/mcp \
 
 ### 4. Supported Tools
 
-The MCP server exposes several tools. Example methods include:
+The MCP server exposes several tools for Twitter management:
 
-- `list_tasks` — List all tasks for a specific date.
-- `create_task` — Create a new task.
-- `edit_task` — Edit an existing task.
-- `delete_task` — Delete a task.
+- `list_tweets` — List all tweets for a specific date or status.
+- `create_tweet` — Create a new tweet or draft.
+- `schedule_tweet` — Schedule a tweet for future posting.
+- `delete_tweet` — Delete a tweet or draft.
 
 **You do not need to provide your user ID in the request.**  
 The server authenticates you based on your API key and injects your user ID automatically.
