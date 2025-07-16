@@ -19,8 +19,12 @@ export const UserSchema = pgTable("user", {
   password: text("password"),
   image: text("image"),
   preferences: json("preferences").default({}).$type<UserPreferences>(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const SessionSchema = pgTable("session", {
@@ -46,8 +50,12 @@ export const AccountSchema = pgTable("account", {
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
   idToken: text("id_token"),
-  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
-  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", {
+    withTimezone: true,
+  }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+    withTimezone: true,
+  }),
   scope: text("scope"),
   password: text("password"),
   createdAt: timestamp("created_at").notNull(),
@@ -59,8 +67,12 @@ export const VerificationSchema = pgTable("verification", {
   identifier: text("identifier").notNull(),
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 export const TwitterAccountSchema = pgTable("twitter_account", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
@@ -73,10 +85,16 @@ export const TwitterAccountSchema = pgTable("twitter_account", {
   profileImageUrl: text("profile_image_url"),
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token"),
-  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", {
+    withTimezone: true,
+  }),
   isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const TweetSchema = pgTable("tweet", {
@@ -109,8 +127,12 @@ export const TweetSchema = pgTable("tweet", {
   userId: uuid("user_id")
     .notNull()
     .references(() => UserSchema.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const TweetThreadSchema = pgTable("tweet_thread", {
@@ -126,8 +148,12 @@ export const TweetThreadSchema = pgTable("tweet_thread", {
   userId: uuid("user_id")
     .notNull()
     .references(() => UserSchema.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const ApiKeySchema = pgTable("api_key", {
@@ -154,8 +180,50 @@ export const ApiKeySchema = pgTable("api_key", {
   isActive: boolean("is_active").default(true).notNull(),
   lastUsedAt: timestamp("last_used_at"),
   expiresAt: timestamp("expires_at"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const oauthApplication = pgTable("oauth_application", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name"),
+  icon: text("icon"),
+  metadata: text("metadata"),
+  clientId: text("client_id").unique(),
+  clientSecret: text("client_secret"),
+  redirectURLs: text("redirect_u_r_ls"),
+  type: text("type"),
+  disabled: boolean("disabled"),
+  userId: text("user_id"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const oauthAccessToken = pgTable("oauth_access_token", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accessToken: text("access_token").unique(),
+  refreshToken: text("refresh_token").unique(),
+  accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+  clientId: text("client_id"),
+  userId: text("user_id"),
+  scopes: text("scopes"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const oauthConsent = pgTable("oauth_consent", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: text("client_id"),
+  userId: text("user_id"),
+  scopes: text("scopes"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+  consentGiven: boolean("consent_given"),
 });
 
 export type UserEntity = typeof UserSchema.$inferSelect;
@@ -163,3 +231,6 @@ export type TwitterAccountEntity = typeof TwitterAccountSchema.$inferSelect;
 export type TweetEntity = typeof TweetSchema.$inferSelect;
 export type TweetThreadEntity = typeof TweetThreadSchema.$inferSelect;
 export type ApiKeyEntity = typeof ApiKeySchema.$inferSelect;
+export type oauthApplicationEntity = typeof oauthApplication.$inferSelect;
+export type oauthAccessTokenEntity = typeof oauthAccessToken.$inferSelect;
+export type oauthConsentEntity = typeof oauthConsent.$inferSelect;

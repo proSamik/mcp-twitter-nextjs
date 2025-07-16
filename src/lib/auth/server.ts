@@ -9,8 +9,12 @@ import { pgDb } from "@/lib/db/pg/db.pg";
 import { headers } from "next/headers";
 import { toast } from "sonner";
 import { eq, sql } from "drizzle-orm";
+import { mcp } from "better-auth/plugins";
 import {
   AccountSchema,
+  oauthAccessToken,
+  oauthApplication,
+  oauthConsent,
   SessionSchema,
   UserSchema,
   VerificationSchema,
@@ -32,6 +36,9 @@ const polarClient = new Polar({
 
 export const auth = betterAuth({
   plugins: [
+    mcp({
+      loginPage: "/sign-in",
+    }),
     nextCookies(),
     polar({
       client: polarClient,
@@ -103,6 +110,9 @@ export const auth = betterAuth({
       session: SessionSchema,
       account: AccountSchema,
       verification: VerificationSchema,
+      oauthApplication: oauthApplication,
+      oauthAccessToken: oauthAccessToken,
+      oauthConsent: oauthConsent,
     },
   }),
   emailAndPassword: {
