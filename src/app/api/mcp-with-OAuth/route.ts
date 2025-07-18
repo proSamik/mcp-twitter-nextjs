@@ -1,7 +1,5 @@
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/server";
-import { createMcpHandler } from "@vercel/mcp-adapter";
-import { withMcpAuth } from "better-auth/plugins";
-import { z } from "zod";
 import { pgDb as db } from "@/lib/db/pg/db.pg";
 import { TweetSchema, TwitterAccountSchema } from "@/lib/db/pg/schema.pg";
 import { eq, and } from "drizzle-orm";
@@ -756,266 +754,438 @@ async function convertDraftToPosted(args: any, userId: string) {
   return await postTweet(args, userId);
 }
 
-const handler = withMcpAuth(auth, (req, session) => {
-  // session contains the access token record with scopes and user ID
-  return createMcpHandler(
-    (server) => {
-      server.tool(
-        "list_tweets",
-        "🔍 LIST TWEETS: Get all tweets for the authenticated user. Use this to view existing tweets before creating new ones or to check tweet statuses. Essential for managing tweet content.",
-        {
-          status: z
-            .enum(["draft", "scheduled", "posted", "failed"])
-            .optional()
-            .describe("Filter tweets by status"),
-          limit: z
-            .number()
-            .optional()
-            .describe("Maximum number of tweets to return (default: 50)"),
-        },
-        async (args, _extra) => {
-          const result = await listTweets(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
+/**
+ * Authenticate MCP requests using Better Auth session
+ * @param request Next.js request object
+ * @returns session object or null
+ */
+async function authenticateRequest(request: NextRequest) {
+  const session = await auth.api.getMcpSession({
+    headers: request.headers,
+  });
+  if (!session) {
+    return null;
+  }
+  return session;
+}
 
-      server.tool(
-        "create_tweet",
-        "✍️ CREATE TWEET: Create a new tweet or draft for the authenticated user. Use this to create content that can be posted immediately or saved as a draft for later scheduling. Do NOT use this for scheduling - use convert_draft_to_scheduled instead!",
-        {
-          content: z.string().describe("Tweet content"),
-          tweetType: z
-            .enum(["draft", "single", "thread"])
-            .default("draft")
-            .describe("Type of tweet"),
-          status: z
-            .enum(["draft", "scheduled", "posted"])
-            .default("draft")
-            .describe("Tweet status"),
-          scheduledFor: z
-            .string()
-            .optional()
-            .describe(
-              "ISO date string for when to post (for scheduled tweets)",
-            ),
-          hashtags: z
-            .array(z.string())
-            .optional()
-            .describe("Hashtags to include"),
-          mentions: z
-            .array(z.string())
-            .optional()
-            .describe("Usernames to mention"),
-          tags: z.array(z.string()).optional().describe("Organizational tags"),
-          twitterAccountId: z
-            .string()
-            .optional()
-            .describe(
-              "ID of Twitter account to use (optional, uses first active account if not provided)",
-            ),
-        },
-        async (args) => {
-          const result = await createTweet(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
+/**
+ * POST handler for direct JSON-RPC requests
+ * Handles MCP methods directly without transport layer to avoid compatibility issues.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    // Authenticate the request
+    const session = await authenticateRequest(request);
+    if (!session) {
+      return new Response(null, {
+        status: 401,
+      });
+    }
 
-      server.tool(
-        "schedule_tweet",
-        "⏰ SCHEDULE EXISTING TWEET: Schedule an existing DRAFT tweet for posting at a specific time. Only works with tweets that have status='draft'. Use this to schedule drafts.",
-        {
-          nanoId: z.string().describe("Unique nanoId of the tweet to schedule"),
-          scheduledFor: z
-            .string()
-            .describe(
-              "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
-            ),
-          timezone: z
-            .string()
-            .default("UTC")
-            .describe(
-              "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-            ),
-        },
-        async (args) => {
-          const result = await scheduleTweet(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
+    // Parse the JSON-RPC request
+    const body = await request.json();
+    const { method, params, id } = body;
 
-      server.tool(
-        "delete_tweet",
-        "🗑️ DELETE TWEET: Permanently delete a tweet by nanoId. Works for drafts, scheduled tweets (will cancel QStash scheduling), and posted tweets. Use this to remove unwanted content.",
-        {
-          nanoId: z.string().describe("Unique nanoId of the tweet to delete"),
-        },
-        async (args) => {
-          const result = await deleteTweet(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
+    // Debug logging
+    console.log(`MCP Request: ${method}`, {
+      method,
+      params,
+      id,
+      headers: Object.fromEntries(request.headers.entries()),
+    });
 
-      server.tool(
-        "post_tweet",
-        "🚀 POST TWEET NOW: Immediately post a DRAFT tweet to Twitter. Only works with tweets that have status='draft'. Use this to publish content right away.",
-        {
-          nanoId: z
-            .string()
-            .describe("Unique nanoId of the draft tweet to post"),
-        },
-        async (args) => {
-          const result = await postTweet(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
+    // Handle MCP protocol methods directly
+    switch (method) {
+      case "initialize":
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          result: {
+            protocolVersion: params.protocolVersion || "2025-06-18",
+            capabilities: {
+              tools: {},
+              prompts: {},
+              resources: {},
+              logging: {},
+            },
+            serverInfo: {
+              name: "twitter-mcp-server",
+              version: "1.0.0",
+            },
+          },
+          id,
+        });
 
-      server.tool(
-        "reschedule_tweet",
-        "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling.",
-        {
-          nanoId: z
-            .string()
-            .describe("Unique nanoId of the scheduled tweet to reschedule"),
-          newScheduledFor: z
-            .string()
-            .describe(
-              "New date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
-            ),
-          timezone: z
-            .string()
-            .default("UTC")
-            .describe(
-              "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-            ),
-        },
-        async (args) => {
-          const result = await rescheduleTweet(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
+      case "resources/list":
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          result: {
+            resources: [],
+          },
+          id,
+        });
 
-      server.tool(
-        "convert_draft_to_scheduled",
-        "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
-        {
-          nanoId: z
-            .string()
-            .describe("Unique nanoId of the draft tweet to convert"),
-          scheduledFor: z
-            .string()
-            .describe(
-              "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
-            ),
-          timezone: z
-            .string()
-            .default("UTC")
-            .describe(
-              "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-            ),
-        },
-        async (args) => {
-          const result = await convertDraftToScheduled(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
+      case "tools/list":
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          result: {
+            tools: [
+              // list tweets
+              {
+                name: "list_tweets",
+                description:
+                  "🔍 LIST TWEETS: Get all tweets for the authenticated user. Use this to view existing tweets before creating new ones or to check tweet statuses. Essential for managing tweet content.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    status: {
+                      type: "string",
+                      enum: ["draft", "scheduled", "posted", "failed"],
+                      description: "Filter tweets by status",
+                    },
+                    limit: {
+                      type: "number",
+                      description:
+                        "Maximum number of tweets to return (default: 50)",
+                    },
+                  },
+                  required: [],
+                },
+              },
+              // create tweets
+              {
+                name: "create_tweet",
+                description:
+                  "✍️ CREATE TWEET: Create a new tweet or draft for the authenticated user. Use this to create content that can be posted immediately or saved as a draft for later scheduling. Do NOT use this for scheduling - use convert_draft_to_scheduled instead!",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    content: {
+                      type: "string",
+                      description: "Tweet content",
+                    },
+                    tweetType: {
+                      type: "string",
+                      enum: ["draft", "single", "thread"],
+                      description: "Type of tweet",
+                      default: "draft",
+                    },
+                    status: {
+                      type: "string",
+                      enum: ["draft", "scheduled", "posted"],
+                      description: "Tweet status",
+                      default: "draft",
+                    },
+                    scheduledFor: {
+                      type: "string",
+                      format: "date-time",
+                      description:
+                        "ISO date string for when to post (for scheduled tweets)",
+                    },
+                    hashtags: {
+                      type: "array",
+                      items: { type: "string" },
+                      description: "Hashtags to include",
+                    },
+                    mentions: {
+                      type: "array",
+                      items: { type: "string" },
+                      description: "Usernames to mention",
+                    },
+                    tags: {
+                      type: "array",
+                      items: { type: "string" },
+                      description: "Organizational tags",
+                    },
+                    twitterAccountId: {
+                      type: "string",
+                      description:
+                        "ID of Twitter account to use (optional, uses first active account if not provided)",
+                    },
+                  },
+                  required: ["content"],
+                },
+              },
+              // schedule tweets
+              {
+                name: "schedule_tweet",
+                description:
+                  "⏰ SCHEDULE EXISTING TWEET: Schedule an existing DRAFT tweet for posting at a specific time. Only works with tweets that have status='draft'. Use this to schedule drafts.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    nanoId: {
+                      type: "string",
+                      description: "Unique nanoId of the tweet to schedule",
+                    },
+                    scheduledFor: {
+                      type: "string",
+                      format: "date-time",
+                      description:
+                        "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
+                    },
+                    timezone: {
+                      type: "string",
+                      description:
+                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
+                      default: "UTC",
+                    },
+                  },
+                  required: ["nanoId", "scheduledFor"],
+                },
+              },
+              // delete tweets
+              {
+                name: "delete_tweet",
+                description:
+                  "🗑️ DELETE TWEET: Permanently delete a tweet by nanoId. Works for drafts, scheduled tweets (will cancel QStash scheduling), and posted tweets. Use this to remove unwanted content.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    nanoId: {
+                      type: "string",
+                      description: "Unique nanoId of the tweet to delete",
+                    },
+                  },
+                  required: ["nanoId"],
+                },
+              },
+              // post tweet
+              {
+                name: "post_tweet",
+                description:
+                  "🚀 POST TWEET NOW: Immediately post a DRAFT tweet to Twitter. Only works with tweets that have status='draft'. Use this to publish content right away.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    nanoId: {
+                      type: "string",
+                      description: "Unique nanoId of the draft tweet to post",
+                    },
+                  },
+                  required: ["nanoId"],
+                },
+              },
+              // reschedule tweet
+              {
+                name: "reschedule_tweet",
+                description:
+                  "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    nanoId: {
+                      type: "string",
+                      description:
+                        "Unique nanoId of the scheduled tweet to reschedule",
+                    },
+                    newScheduledFor: {
+                      type: "string",
+                      format: "date-time",
+                      description:
+                        "New date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
+                    },
+                    timezone: {
+                      type: "string",
+                      description:
+                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
+                      default: "UTC",
+                    },
+                  },
+                  required: ["nanoId", "newScheduledFor"],
+                },
+              },
+              // convert draft to scheduled
+              {
+                name: "convert_draft_to_scheduled",
+                description:
+                  "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    nanoId: {
+                      type: "string",
+                      description:
+                        "Unique nanoId of the draft tweet to convert",
+                    },
+                    scheduledFor: {
+                      type: "string",
+                      format: "date-time",
+                      description:
+                        "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
+                    },
+                    timezone: {
+                      type: "string",
+                      description:
+                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
+                      default: "UTC",
+                    },
+                  },
+                  required: ["nanoId", "scheduledFor"],
+                },
+              },
+              // convert draft to posted
+              {
+                name: "convert_draft_to_posted",
+                description:
+                  "📢 CONVERT DRAFT TO POSTED: Transform a DRAFT tweet into a POSTED tweet (immediately publish to Twitter). This is the PREFERRED way to post new content - first create a draft, then convert it to posted.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    nanoId: {
+                      type: "string",
+                      description: "Unique nanoId of the draft tweet to post",
+                    },
+                  },
+                  required: ["nanoId"],
+                },
+              },
+            ],
+          },
+          id,
+        });
 
-      server.tool(
-        "convert_draft_to_posted",
-        "📢 CONVERT DRAFT TO POSTED: Transform a DRAFT tweet into a POSTED tweet (immediately publish to Twitter). This is the PREFERRED way to post new content - first create a draft, then convert it to posted.",
-        {
-          nanoId: z
-            .string()
-            .describe("Unique nanoId of the draft tweet to post"),
+      case "tools/call":
+        try {
+          const { name: toolName, arguments: toolArgs } = params;
+
+          // Execute tools directly based on their name
+          let result: any;
+          switch (toolName) {
+            case "list_tweets":
+              result = await listTweets(toolArgs, session.userId);
+              break;
+            case "create_tweet":
+              result = await createTweet(toolArgs, session.userId);
+              break;
+            case "schedule_tweet":
+              result = await scheduleTweet(toolArgs, session.userId);
+              break;
+            case "delete_tweet":
+              result = await deleteTweet(toolArgs, session.userId);
+              break;
+            case "post_tweet":
+              result = await postTweet(toolArgs, session.userId);
+              break;
+            case "reschedule_tweet":
+              result = await rescheduleTweet(toolArgs, session.userId);
+              break;
+            case "convert_draft_to_scheduled":
+              result = await convertDraftToScheduled(toolArgs, session.userId);
+              break;
+            case "convert_draft_to_posted":
+              result = await convertDraftToPosted(toolArgs, session.userId);
+              break;
+            default:
+              throw new Error(`Tool ${toolName} not found`);
+          }
+
+          return NextResponse.json({
+            jsonrpc: "2.0",
+            result,
+            id,
+          });
+        } catch (error) {
+          return NextResponse.json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32603,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Tool execution failed",
+            },
+            id,
+          });
+        }
+
+      default:
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32601,
+            message: `Method ${method} not found`,
+          },
+          id,
+        });
+    }
+  } catch (error) {
+    console.error("MCP POST request error:", error);
+    return NextResponse.json(
+      {
+        jsonrpc: "2.0",
+        error: {
+          code: -32603,
+          message: "Internal server error",
         },
-        async (args) => {
-          const result = await convertDraftToPosted(args, session.userId);
-          return {
-            content: result.content.map((item) => ({
-              type: "text" as const,
-              text: item.text,
-            })),
-            isError: result.isError,
-          };
-        },
-      );
-    },
-    {
-      capabilities: {
-        tools: {
-          list_tweets: {
-            description: "Get all tweets for the authenticated user",
-          },
-          create_tweet: {
-            description: "Create a new tweet or draft",
-          },
-          schedule_tweet: {
-            description: "Schedule an existing draft tweet",
-          },
-          delete_tweet: {
-            description: "Delete a tweet by nanoId",
-          },
-          post_tweet: {
-            description: "Post a draft tweet immediately",
-          },
-          reschedule_tweet: {
-            description: "Reschedule an existing scheduled tweet",
-          },
-          convert_draft_to_scheduled: {
-            description: "Convert a draft tweet to scheduled",
-          },
-          convert_draft_to_posted: {
-            description: "Convert a draft tweet to posted",
-          },
-        },
+        id: null,
       },
-    },
-    {
-      basePath: "/api",
-      maxDuration: 60,
-    },
-  )(req);
-});
+      { status: 500 },
+    );
+  }
+}
 
-export { handler as GET, handler as POST, handler as DELETE };
+/**
+ * GET handler for Streamable HTTP transport - establishes SSE stream
+ * Required by MCP Inspector and other clients using Streamable HTTP
+ */
+export async function GET(request: NextRequest) {
+  try {
+    // Authenticate the request
+    const session = await authenticateRequest(request);
+    if (!session) {
+      return new Response(null, {
+        status: 401,
+      });
+    }
+
+    // Check if client accepts Server-Sent Events
+    const acceptHeader = request.headers.get("accept") || "";
+    if (!acceptHeader.includes("text/event-stream")) {
+      return new NextResponse("Method Not Allowed", { status: 405 });
+    }
+
+    // Create SSE stream
+    const stream = new ReadableStream({
+      start(controller) {
+        // Send initial connection event
+        const encoder = new TextEncoder();
+        const data = `data: ${JSON.stringify({
+          type: "connection",
+          timestamp: new Date().toISOString(),
+          sessionId: crypto.randomUUID(),
+        })}\n\n`;
+        controller.enqueue(encoder.encode(data));
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, Accept, Mcp-Session-Id",
+        "Access-Control-Expose-Headers": "Mcp-Session-Id",
+      },
+    });
+  } catch (error) {
+    console.error("MCP GET request error:", error);
+    return new NextResponse("Internal Server Error", { status: 500 });
+  }
+}
+
+// OPTIONS handler for CORS
+export async function OPTIONS(_: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Authorization, Accept, Mcp-Session-Id",
+      "Access-Control-Expose-Headers": "Mcp-Session-Id",
+    },
+  });
+}
