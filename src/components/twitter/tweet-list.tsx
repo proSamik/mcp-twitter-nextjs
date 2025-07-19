@@ -71,7 +71,9 @@ export function TweetList({ userId }: TweetListProps) {
   const [editingTweet, setEditingTweet] = useState<TweetEntity | null>(null);
   const [scheduleDate, setScheduleDate] = useState<string>("");
   const [editContent, setEditContent] = useState<string>("");
-  const [editThreadTweets, setEditThreadTweets] = useState<string[]>([]);
+  const [editThreadTweets, setEditThreadTweets] = useState<
+    { content: string; mediaFiles: MediaFile[] }[]
+  >([]);
   const [editMediaFiles, setEditMediaFiles] = useState<MediaFile[]>([]);
   const [_editThreadMediaFiles, setEditThreadMediaFiles] = useState<
     MediaFile[][]
@@ -80,16 +82,236 @@ export function TweetList({ userId }: TweetListProps) {
   // Helper functions for thread management
   const updateEditThreadTweet = (index: number, content: string) => {
     setEditThreadTweets((prev) =>
-      prev.map((tweet, i) => (i === index ? content : tweet)),
+      prev.map((tweet, i) => (i === index ? { ...tweet, content } : tweet)),
     );
   };
 
   const addEditThreadTweet = () => {
-    setEditThreadTweets((prev) => [...prev, ""]);
+    setEditThreadTweets((prev) => [...prev, { content: "", mediaFiles: [] }]);
+  };
+
+  const updateEditThreadTweetMedia = (
+    tweetIndex: number,
+    mediaFiles: MediaFile[],
+  ) => {
+    setEditThreadTweets((prev) =>
+      prev.map((tweet, i) =>
+        i === tweetIndex ? { ...tweet, mediaFiles } : tweet,
+      ),
+    );
+  };
+
+  const handleEditTweetMediaUpload = async (
+    tweetIndex: number,
+    files: File[],
+  ) => {
+    const tweet = editThreadTweets[tweetIndex];
+    const MAX_FILES = 4;
+    const currentFileCount = tweet.mediaFiles.length;
+
+    if (currentFileCount + files.length > MAX_FILES) {
+      toast.error(
+        `Maximum ${MAX_FILES} files allowed per tweet. You can add ${MAX_FILES - currentFileCount} more.`,
+      );
+      return;
+    }
+
+    const newMediaFiles: MediaFile[] = files.map((file) => {
+      const isVideo = file.type.startsWith("video/");
+      return {
+        file,
+        url: URL.createObjectURL(file),
+        type: isVideo ? "video" : "image",
+        size: file.size,
+        uploading: false,
+        uploaded: false,
+        uploadProgress: 0,
+      };
+    });
+
+    // Add new files to the specific tweet
+    const updatedMediaFiles = [...tweet.mediaFiles, ...newMediaFiles];
+    updateEditThreadTweetMedia(tweetIndex, updatedMediaFiles);
+
+    // Start uploading files
+    for (let i = 0; i < newMediaFiles.length; i++) {
+      const mediaFile = newMediaFiles[i];
+      await uploadEditTweetMediaFile(
+        tweetIndex,
+        currentFileCount + i,
+        mediaFile,
+      );
+    }
+  };
+
+  const uploadEditTweetMediaFile = async (
+    tweetIndex: number,
+    mediaIndex: number,
+    mediaFile: MediaFile,
+  ) => {
+    try {
+      // Update file status to uploading
+      setEditThreadTweets((prevTweets) =>
+        prevTweets.map((tweet, i) =>
+          i === tweetIndex
+            ? {
+                ...tweet,
+                mediaFiles: tweet.mediaFiles.map((file, j) =>
+                  j === mediaIndex
+                    ? { ...file, uploading: true, uploadProgress: 0 }
+                    : file,
+                ),
+              }
+            : tweet,
+        ),
+      );
+
+      const formData = new FormData();
+      formData.append("file", mediaFile.file);
+      formData.append("mediaType", mediaFile.type);
+
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setEditThreadTweets((prevTweets) =>
+          prevTweets.map((tweet, i) =>
+            i === tweetIndex
+              ? {
+                  ...tweet,
+                  mediaFiles: tweet.mediaFiles.map((file, j) =>
+                    j === mediaIndex &&
+                    file.uploadProgress !== undefined &&
+                    file.uploadProgress < 90
+                      ? { ...file, uploadProgress: file.uploadProgress + 10 }
+                      : file,
+                  ),
+                }
+              : tweet,
+          ),
+        );
+      }, 200);
+
+      const response = await fetch("/api/media/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      const data = await response.json();
+
+      if (data.success) {
+        setEditThreadTweets((prevTweets) =>
+          prevTweets.map((tweet, i) =>
+            i === tweetIndex
+              ? {
+                  ...tweet,
+                  mediaFiles: tweet.mediaFiles.map((file, j) =>
+                    j === mediaIndex
+                      ? {
+                          ...file,
+                          uploading: false,
+                          uploaded: true,
+                          uploadProgress: 100,
+                          r2Key: data.file.key,
+                          r2Url: data.file.url,
+                        }
+                      : file,
+                  ),
+                }
+              : tweet,
+          ),
+        );
+        toast.success(
+          `${mediaFile.type === "video" ? "Video" : "Image"} uploaded successfully!`,
+        );
+      } else {
+        setEditThreadTweets((prevTweets) =>
+          prevTweets.map((tweet, i) =>
+            i === tweetIndex
+              ? {
+                  ...tweet,
+                  mediaFiles: tweet.mediaFiles.map((file, j) =>
+                    j === mediaIndex
+                      ? {
+                          ...file,
+                          uploading: false,
+                          uploaded: false,
+                          uploadProgress: 0,
+                          error: data.error,
+                        }
+                      : file,
+                  ),
+                }
+              : tweet,
+          ),
+        );
+        toast.error(
+          `Failed to upload ${mediaFile.type === "video" ? "video" : "image"}`,
+        );
+      }
+    } catch (error) {
+      console.error("Error uploading media file:", error);
+      setEditThreadTweets((prevTweets) =>
+        prevTweets.map((tweet, i) =>
+          i === tweetIndex
+            ? {
+                ...tweet,
+                mediaFiles: tweet.mediaFiles.map((file, j) =>
+                  j === mediaIndex
+                    ? {
+                        ...file,
+                        uploading: false,
+                        uploaded: false,
+                        uploadProgress: 0,
+                        error: "Upload failed",
+                      }
+                    : file,
+                ),
+              }
+            : tweet,
+        ),
+      );
+      toast.error("Failed to upload media file");
+    }
+  };
+
+  const removeEditTweetMediaFile = (tweetIndex: number, mediaIndex: number) => {
+    const tweet = editThreadTweets[tweetIndex];
+    const fileToRemove = tweet.mediaFiles[mediaIndex];
+
+    // Clean up blob URL
+    if (fileToRemove.url.startsWith("blob:")) {
+      URL.revokeObjectURL(fileToRemove.url);
+    }
+
+    const updatedMediaFiles = tweet.mediaFiles.filter(
+      (_, i) => i !== mediaIndex,
+    );
+    updateEditThreadTweetMedia(tweetIndex, updatedMediaFiles);
+  };
+
+  const cleanupEditThreadMediaFiles = async () => {
+    // Clean up blob URLs for all thread tweets
+    for (const tweet of editThreadTweets) {
+      for (const mediaFile of tweet.mediaFiles) {
+        if (mediaFile.url.startsWith("blob:")) {
+          URL.revokeObjectURL(mediaFile.url);
+        }
+      }
+    }
   };
 
   const removeEditThreadTweet = (index: number) => {
     if (editThreadTweets.length > 1) {
+      // Clean up media files for the tweet being removed
+      const tweetToRemove = editThreadTweets[index];
+      if (tweetToRemove.mediaFiles.length > 0) {
+        tweetToRemove.mediaFiles.forEach((mediaFile) => {
+          if (mediaFile.url.startsWith("blob:")) {
+            URL.revokeObjectURL(mediaFile.url);
+          }
+        });
+      }
+
       setEditThreadTweets((prev) => prev.filter((_, i) => i !== index));
     }
   };
@@ -97,20 +319,65 @@ export function TweetList({ userId }: TweetListProps) {
   // Get the content to send to API
   const getFinalEditContent = () => {
     if (editingTweet?.tweetType === "thread") {
-      return editThreadTweets.filter((t) => t.trim()).join("\n\n");
+      return editThreadTweets
+        .filter((t) => t.content.trim())
+        .map((t) => t.content)
+        .join("\n\n");
     }
     return editContent;
+  };
+
+  // Get thread data with media files for API
+  const getThreadDataForAPI = () => {
+    if (editingTweet?.tweetType === "thread") {
+      return editThreadTweets
+        .filter((t) => t.content.trim())
+        .map((tweet) => ({
+          content: tweet.content,
+          mediaIds: tweet.mediaFiles
+            .filter((file) => file.uploaded && file.r2Key)
+            .map((file) => file.r2Key)
+            .filter((key): key is string => Boolean(key)),
+        }));
+    }
+    return undefined;
+  };
+
+  // Check if any thread tweets have failed media uploads
+  const hasFailedMediaUploads = () => {
+    if (editingTweet?.tweetType === "thread") {
+      return editThreadTweets.some((tweet) =>
+        tweet.mediaFiles.some((file) => file.error),
+      );
+    }
+    return editMediaFiles.some((file) => file.error);
+  };
+
+  // Check if any media files are still uploading
+  const hasUploadingMedia = () => {
+    if (editingTweet?.tweetType === "thread") {
+      return editThreadTweets.some((tweet) =>
+        tweet.mediaFiles.some((file) => file.uploading),
+      );
+    }
+    return editMediaFiles.some((file) => file.uploading);
   };
 
   // Validate content for both single tweets and threads
   const isContentValid = () => {
     if (editingTweet?.tweetType === "thread") {
-      const validTweets = editThreadTweets.filter((t) => t.trim());
+      const validTweets = editThreadTweets.filter((t) => t.content.trim());
       return (
-        validTweets.length > 0 && validTweets.every((t) => t.length <= 280)
+        validTweets.length > 0 &&
+        validTweets.every((t) => t.content.length <= 280) &&
+        !hasFailedMediaUploads()
       );
     }
-    return editContent.trim() && editContent.length <= 280;
+    return (
+      editContent.trim() &&
+      editContent.length <= 280 &&
+      !hasFailedMediaUploads()
+    );
   };
 
   // Media upload functions
@@ -352,17 +619,21 @@ export function TweetList({ userId }: TweetListProps) {
   };
 
   // Handler to open edit dialog for a draft
-  const handleEditDraft = (tweet: TweetEntity) => {
+  const handleEditDraft = (tweet: any) => {
     setEditingTweet(tweet);
     setEditDialogOpen(true);
     setScheduleDate("");
     setEditMediaFiles([]); // Clear media files
     setEditThreadMediaFiles([]); // Clear thread media files
 
-    if (tweet.tweetType === "thread" && tweet.content) {
-      // Split thread content back into individual tweets
-      const threadTweets = tweet.content.split("\n\n").filter((t) => t.trim());
-      setEditThreadTweets(threadTweets);
+    if (tweet.tweetType === "thread" && tweet.threadTweets) {
+      // Use individual thread tweets with their media
+      setEditThreadTweets(
+        tweet.threadTweets.map((threadTweet: any) => ({
+          content: threadTweet.content,
+          mediaFiles: [], // Will be loaded from threadTweet.mediaUrls if needed
+        })),
+      );
       setEditContent(""); // Clear single content for threads
     } else {
       setEditContent(tweet.content || "");
@@ -371,16 +642,20 @@ export function TweetList({ userId }: TweetListProps) {
   };
 
   // Handler to open edit dialog for a scheduled tweet
-  const handleEditScheduled = (tweet: TweetEntity) => {
+  const handleEditScheduled = (tweet: any) => {
     setEditingTweet(tweet);
     setEditDialogOpen(true);
     setEditMediaFiles([]); // Clear media files
     setEditThreadMediaFiles([]); // Clear thread media files
 
-    if (tweet.tweetType === "thread" && tweet.content) {
-      // Split thread content back into individual tweets
-      const threadTweets = tweet.content.split("\n\n").filter((t) => t.trim());
-      setEditThreadTweets(threadTweets);
+    if (tweet.tweetType === "thread" && tweet.threadTweets) {
+      // Use individual thread tweets with their media
+      setEditThreadTweets(
+        tweet.threadTweets.map((threadTweet: any) => ({
+          content: threadTweet.content,
+          mediaFiles: [], // Will be loaded from threadTweet.mediaUrls if needed
+        })),
+      );
       setEditContent(""); // Clear single content for threads
     } else {
       setEditContent(tweet.content || "");
@@ -398,35 +673,64 @@ export function TweetList({ userId }: TweetListProps) {
         .toISOString()
         .slice(0, 16);
       setScheduleDate(localISOTime);
-    } else {
-      setScheduleDate("");
     }
   };
 
   // Handler to schedule a draft
   const handleScheduleDraft = async () => {
     if (!editingTweet) return;
+
+    // Check for failed uploads
+    if (hasFailedMediaUploads()) {
+      toast.error("Please remove failed uploads before scheduling");
+      return;
+    }
+
+    // Check for uploading media
+    if (hasUploadingMedia()) {
+      toast.error("Please wait for media uploads to complete");
+      return;
+    }
+
     try {
-      const mediaIds = editMediaFiles
-        .filter((file) => file.uploaded)
-        .map((file) => file.r2Key)
-        .filter(Boolean);
+      const requestBody: any = {
+        tweetId: editingTweet.nanoId,
+        action: "schedule",
+        scheduledFor: new Date(scheduleDate).toISOString(),
+      };
+
+      // Handle content changes
+      if (getFinalEditContent() !== editingTweet.content) {
+        requestBody.content = getFinalEditContent();
+      }
+
+      if (editingTweet.tweetType === "thread") {
+        // For thread tweets, include threadData with media
+        const threadData = getThreadDataForAPI();
+        if (threadData && threadData.length > 0) {
+          requestBody.threadData = threadData;
+          requestBody.isThread = true;
+          requestBody.hasMedia = threadData.some((t) => t.mediaIds.length > 0);
+        }
+      } else {
+        // For single tweets, include mediaIds
+        const mediaIds = editMediaFiles
+          .filter((file) => file.uploaded)
+          .map((file) => file.r2Key)
+          .filter(Boolean);
+
+        if (mediaIds.length > 0) {
+          requestBody.mediaIds = mediaIds;
+          requestBody.hasMedia = true;
+        }
+      }
 
       const response = await fetch("/api/twitter/tweets", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tweetId: editingTweet.nanoId,
-          action: "schedule",
-          scheduledFor: new Date(scheduleDate).toISOString(), // Convert to UTC ISO string
-          content:
-            getFinalEditContent() !== editingTweet.content
-              ? getFinalEditContent()
-              : undefined,
-          mediaIds: mediaIds.length > 0 ? mediaIds : undefined,
-          hasMedia: mediaIds.length > 0,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
       const data = await response.json();
       if (data.success) {
         toast.success("Draft scheduled successfully");
@@ -445,27 +749,57 @@ export function TweetList({ userId }: TweetListProps) {
   const handleReschedule = async () => {
     if (!editingTweet || !scheduleDate) return;
 
+    // Check for failed uploads
+    if (hasFailedMediaUploads()) {
+      toast.error("Please remove failed uploads before rescheduling");
+      return;
+    }
+
+    // Check for uploading media
+    if (hasUploadingMedia()) {
+      toast.error("Please wait for media uploads to complete");
+      return;
+    }
+
     try {
-      const mediaIds = editMediaFiles
-        .filter((file) => file.uploaded)
-        .map((file) => file.r2Key)
-        .filter(Boolean);
+      const requestBody: any = {
+        tweetId: editingTweet.nanoId,
+        action: "reschedule",
+        scheduledFor: new Date(scheduleDate).toISOString(),
+      };
+
+      // Handle content changes
+      if (getFinalEditContent() !== editingTweet.content) {
+        requestBody.content = getFinalEditContent();
+      }
+
+      if (editingTweet.tweetType === "thread") {
+        // For thread tweets, include threadData with media
+        const threadData = getThreadDataForAPI();
+        if (threadData && threadData.length > 0) {
+          requestBody.threadData = threadData;
+          requestBody.isThread = true;
+          requestBody.hasMedia = threadData.some((t) => t.mediaIds.length > 0);
+        }
+      } else {
+        // For single tweets, include mediaIds
+        const mediaIds = editMediaFiles
+          .filter((file) => file.uploaded)
+          .map((file) => file.r2Key)
+          .filter(Boolean);
+
+        if (mediaIds.length > 0) {
+          requestBody.mediaIds = mediaIds;
+          requestBody.hasMedia = true;
+        }
+      }
 
       const response = await fetch("/api/twitter/tweets", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tweetId: editingTweet.nanoId,
-          action: "reschedule",
-          scheduledFor: new Date(scheduleDate).toISOString(), // Convert to UTC ISO string
-          content:
-            getFinalEditContent() !== editingTweet.content
-              ? getFinalEditContent()
-              : undefined,
-          mediaIds: mediaIds.length > 0 ? mediaIds : undefined,
-          hasMedia: mediaIds.length > 0,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
       const data = await response.json();
       if (data.success) {
         toast.success("Tweet rescheduled successfully");
@@ -482,26 +816,57 @@ export function TweetList({ userId }: TweetListProps) {
   // Handler to post a draft immediately
   const handlePostDraft = async () => {
     if (!editingTweet) return;
+
+    // Check for failed uploads
+    if (hasFailedMediaUploads()) {
+      toast.error("Please remove failed uploads before posting");
+      return;
+    }
+
+    // Check for uploading media
+    if (hasUploadingMedia()) {
+      toast.error("Please wait for media uploads to complete");
+      return;
+    }
+
     try {
-      const mediaIds = editMediaFiles
-        .filter((file) => file.uploaded)
-        .map((file) => file.r2Key)
-        .filter(Boolean);
+      const requestBody: any = {
+        tweetId: editingTweet.nanoId,
+        action: "post",
+      };
+
+      // Handle content changes
+      if (getFinalEditContent() !== editingTweet.content) {
+        requestBody.content = getFinalEditContent();
+      }
+
+      if (editingTweet.tweetType === "thread") {
+        // For thread tweets, include threadData with media
+        const threadData = getThreadDataForAPI();
+        if (threadData && threadData.length > 0) {
+          requestBody.threadData = threadData;
+          requestBody.isThread = true;
+          requestBody.hasMedia = threadData.some((t) => t.mediaIds.length > 0);
+        }
+      } else {
+        // For single tweets, include mediaIds
+        const mediaIds = editMediaFiles
+          .filter((file) => file.uploaded)
+          .map((file) => file.r2Key)
+          .filter(Boolean);
+
+        if (mediaIds.length > 0) {
+          requestBody.mediaIds = mediaIds;
+          requestBody.hasMedia = true;
+        }
+      }
 
       const response = await fetch("/api/twitter/tweets", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tweetId: editingTweet.nanoId,
-          action: "post",
-          content:
-            getFinalEditContent() !== editingTweet.content
-              ? getFinalEditContent()
-              : undefined,
-          mediaIds: mediaIds.length > 0 ? mediaIds : undefined,
-          hasMedia: mediaIds.length > 0,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
       const data = await response.json();
       if (data.success) {
         toast.success("Draft posted successfully");
@@ -781,6 +1146,7 @@ export function TweetList({ userId }: TweetListProps) {
           if (!open) {
             // Clean up media files when dialog closes
             cleanupEditMediaFiles();
+            cleanupEditThreadMediaFiles();
           }
         }}
       >
@@ -824,9 +1190,9 @@ export function TweetList({ userId }: TweetListProps) {
                         </label>
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-xs ${tweet.length > 280 ? "text-red-500" : tweet.length > 260 ? "text-yellow-500" : "text-muted-foreground"}`}
+                            className={`text-xs ${tweet.content.length > 280 ? "text-red-500" : tweet.content.length > 260 ? "text-yellow-500" : "text-muted-foreground"}`}
                           >
-                            {tweet.length}/280 chars
+                            {tweet.content.length}/280 chars
                           </span>
                           {editThreadTweets.length > 1 && (
                             <Button
@@ -841,7 +1207,7 @@ export function TweetList({ userId }: TweetListProps) {
                         </div>
                       </div>
                       <Textarea
-                        value={tweet}
+                        value={tweet.content}
                         onChange={(e) =>
                           updateEditThreadTweet(index, e.target.value)
                         }
@@ -849,11 +1215,136 @@ export function TweetList({ userId }: TweetListProps) {
                         className="min-h-[80px] resize-none"
                         maxLength={280}
                       />
-                      {tweet.length > 280 && (
+                      {tweet.content.length > 280 && (
                         <span className="text-xs text-red-500">
                           Tweet exceeds character limit
                         </span>
                       )}
+
+                      {/* Media Upload for this tweet */}
+                      <div className="space-y-3">
+                        <label className="text-sm font-medium">
+                          Media for Tweet {index + 1}
+                        </label>
+
+                        {/* Add Media Button */}
+                        {tweet.mediaFiles.length < 4 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const input = document.createElement("input");
+                              input.type = "file";
+                              input.accept = "image/*,video/*";
+                              input.multiple = true;
+                              input.onchange = (e) => {
+                                const files = Array.from(
+                                  (e.target as HTMLInputElement).files || [],
+                                );
+                                if (files.length > 0) {
+                                  handleEditTweetMediaUpload(index, files);
+                                }
+                              };
+                              input.click();
+                            }}
+                            className="w-full justify-start text-muted-foreground hover:text-primary"
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Add Media{" "}
+                            {tweet.mediaFiles.length > 0 &&
+                              `(${tweet.mediaFiles.length}/4)`}
+                          </Button>
+                        )}
+
+                        {/* Media Files Display */}
+                        {tweet.mediaFiles.length > 0 && (
+                          <div className="grid gap-2 grid-cols-2">
+                            {tweet.mediaFiles.map((mediaFile, mediaIndex) => (
+                              <div
+                                key={mediaIndex}
+                                className="relative border rounded-lg overflow-hidden"
+                              >
+                                <div className="aspect-video bg-muted relative">
+                                  {mediaFile.type === "video" ? (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <video
+                                        src={mediaFile.url}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                        muted
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                        <Play className="h-6 w-6 text-white drop-shadow-lg" />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="relative w-full h-full">
+                                      <Image
+                                        src={mediaFile.url}
+                                        alt="Upload preview"
+                                        fill
+                                        className="object-cover"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Upload Status and Remove Button */}
+                                <div className="absolute top-1 right-1">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      removeEditTweetMediaFile(
+                                        index,
+                                        mediaIndex,
+                                      )
+                                    }
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+
+                                {/* Upload Progress */}
+                                {mediaFile.uploading && (
+                                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-2">
+                                    <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-primary transition-all duration-300"
+                                        style={{
+                                          width: `${mediaFile.uploadProgress}%`,
+                                        }}
+                                      />
+                                    </div>
+                                    <p className="text-xs text-white mt-1">
+                                      Uploading... {mediaFile.uploadProgress}%
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Upload Status */}
+                                {mediaFile.uploaded && (
+                                  <div className="absolute bottom-1 left-1">
+                                    <div className="flex items-center gap-1 bg-green-500/90 text-white px-2 py-1 rounded text-xs">
+                                      <div className="h-2 w-2 bg-white rounded-full" />
+                                      Uploaded
+                                    </div>
+                                  </div>
+                                )}
+
+                                {mediaFile.error && (
+                                  <div className="absolute bottom-1 left-1">
+                                    <div className="flex items-center gap-1 bg-destructive/90 text-white px-2 py-1 rounded text-xs">
+                                      <AlertCircle className="h-3 w-3" />
+                                      Error
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
 
@@ -1050,13 +1541,15 @@ export function TweetList({ userId }: TweetListProps) {
                   <Button
                     variant="secondary"
                     onClick={handlePostDraft}
-                    disabled={!isContentValid()}
+                    disabled={!isContentValid() || hasUploadingMedia()}
                   >
                     <Send className="h-4 w-4 mr-1" /> Post Now
                   </Button>
                   <Button
                     onClick={handleScheduleDraft}
-                    disabled={!scheduleDate || !isContentValid()}
+                    disabled={
+                      !scheduleDate || !isContentValid() || hasUploadingMedia()
+                    }
                   >
                     <CalendarPlus className="h-4 w-4 mr-1" /> Schedule
                   </Button>
@@ -1066,13 +1559,15 @@ export function TweetList({ userId }: TweetListProps) {
                   <Button
                     variant="secondary"
                     onClick={handlePostDraft}
-                    disabled={!isContentValid()}
+                    disabled={!isContentValid() || hasUploadingMedia()}
                   >
                     <Send className="h-4 w-4 mr-1" /> Post Now
                   </Button>
                   <Button
                     onClick={handleReschedule}
-                    disabled={!scheduleDate || !isContentValid()}
+                    disabled={
+                      !scheduleDate || !isContentValid() || hasUploadingMedia()
+                    }
                   >
                     <Clock className="h-4 w-4 mr-1" /> Reschedule
                   </Button>

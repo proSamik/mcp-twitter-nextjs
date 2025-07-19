@@ -71,6 +71,17 @@ export class TwitterClient {
         data: (error as any)?.data,
         headers: (error as any)?.headers,
       });
+
+      // Check if it's a rate limit error
+      if ((error as any)?.code === 429) {
+        const rateLimit = (error as any)?.rateLimit;
+        const resetTime = rateLimit?.reset
+          ? new Date(rateLimit.reset * 1000)
+          : null;
+        const errorMessage = `Rate limit exceeded. Reset time: ${resetTime?.toISOString() || "Unknown"}`;
+        throw new Error(errorMessage);
+      }
+
       throw new Error(
         `Failed to post tweet: ${error instanceof Error ? error.message : "Unknown error"}`,
       );

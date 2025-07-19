@@ -94,6 +94,35 @@ export async function POST(request: NextRequest) {
         twitterAccountId,
       );
 
+      // Helper function to post with retry logic for rate limit errors
+      // Retries up to 3 times with exponential backoff (30s, 60s, 90s)
+      const postWithRetry = async (
+        postFunction: () => Promise<any>,
+        maxRetries = 3,
+      ) => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            return await postFunction();
+          } catch (error) {
+            const isRateLimitError =
+              error instanceof Error &&
+              (error.message.includes("429") ||
+                error.message.includes("Rate limit exceeded"));
+
+            if (isRateLimitError && attempt < maxRetries) {
+              console.log(
+                `Rate limit hit, retrying in ${attempt * 30} seconds... (attempt ${attempt}/${maxRetries})`,
+              );
+              await new Promise((resolve) =>
+                setTimeout(resolve, attempt * 30 * 1000),
+              );
+              continue;
+            }
+            throw error;
+          }
+        }
+      };
+
       // Process media files if any
       let twitterMediaIds: string[] = [];
       if (mediaIds && mediaIds.length > 0) {
@@ -153,9 +182,8 @@ export async function POST(request: NextRequest) {
           mediaIds: mediaIdsPerTweet,
         };
 
-        const results = await twitterClient.postThread(
-          tweetsToPost,
-          threadOptions,
+        const results = await postWithRetry(() =>
+          twitterClient.postThread(tweetsToPost, threadOptions),
         );
         postedTweets = results;
         twitterTweetId = results[0].data.id; // Use first tweet ID as primary
@@ -166,7 +194,9 @@ export async function POST(request: NextRequest) {
         if (twitterMediaIds.length > 0) {
           tweetOptions.mediaIds = twitterMediaIds;
         }
-        const result = await twitterClient.postTweet(content, tweetOptions);
+        const result = await postWithRetry(() =>
+          twitterClient.postTweet(content, tweetOptions),
+        );
         postedTweets = [result];
         twitterTweetId = result.data.id;
       }
@@ -228,28 +258,49 @@ export async function POST(request: NextRequest) {
       console.error(`Failed to post tweet ${tweetId}:`, twitterError);
 
       // Update tweet status to failed
+      let updatedTweet;
       try {
-        await db
+        [updatedTweet] = await db
           .update(TweetSchema)
           .set({
             status: "failed",
             updatedAt: new Date(),
           })
-          .where(eq(TweetSchema.nanoId, tweetId));
+          .where(eq(TweetSchema.nanoId, tweetId))
+          .returning();
       } catch (dbError) {
         console.error("Failed to update tweet status to failed:", dbError);
       }
 
+      // Broadcast failure to connected clients
+      if (updatedTweet) {
+        try {
+          broadcastTweetUpdated(updatedTweet as any, userId);
+        } catch (broadcastError) {
+          console.warn("Failed to broadcast tweet failure:", broadcastError);
+        }
+      }
+
+      // Check if it's a rate limit error
+      const isRateLimitError =
+        twitterError instanceof Error &&
+        (twitterError.message.includes("429") ||
+          twitterError.message.includes("Too Many Requests"));
+
+      const errorMessage = isRateLimitError
+        ? "Rate limit exceeded. Please try again later."
+        : twitterError instanceof Error
+          ? twitterError.message
+          : "Unknown error";
+
       return NextResponse.json(
         {
           success: false,
-          error:
-            twitterError instanceof Error
-              ? twitterError.message
-              : "Unknown error",
+          error: errorMessage,
           tweetId,
+          isRateLimitError,
         },
-        { status: 500 },
+        { status: isRateLimitError ? 429 : 500 },
       );
     }
   } catch (error) {
