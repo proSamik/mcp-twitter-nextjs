@@ -10,7 +10,7 @@ interface Params {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Params },
+  { params }: { params: Promise<Params> },
 ) {
   try {
     const session = await getSession();
@@ -23,7 +23,7 @@ export async function PUT(
     }
 
     const userId = session.user.id;
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     const { name, communityId, description, isActive } = body;
@@ -104,7 +104,7 @@ export async function PUT(
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Params },
+  { params }: { params: Promise<Params> },
 ) {
   try {
     const session = await getSession();
@@ -117,7 +117,7 @@ export async function DELETE(
     }
 
     const userId = session.user.id;
-    const { id } = params;
+    const { id } = await params;
 
     // Check if community exists and belongs to user
     const existingCommunity = await db

@@ -143,7 +143,6 @@ export class R2Client {
   ): string {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2);
-    const _extension = originalName.split(".").pop() || "";
     const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
 
     return `${prefix}/${userId}/${timestamp}-${random}-${sanitizedName}`;
