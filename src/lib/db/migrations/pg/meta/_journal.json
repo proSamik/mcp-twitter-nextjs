@@ -36,6 +36,13 @@
       "when": 1752677179160,
       "tag": "0004_lush_pestilence",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1752911609883,
+      "tag": "0005_yielding_siren",
+      "breakpoints": true
     }
   ]
 }

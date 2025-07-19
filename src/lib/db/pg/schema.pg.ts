@@ -112,6 +112,7 @@ export const TweetSchema = pgTable("tweet", {
   mediaUrls: json("media_urls").default([]).$type<string[]>(),
   hashtags: json("hashtags").default([]).$type<string[]>(),
   mentions: json("mentions").default([]).$type<string[]>(),
+  communityId: text("community_id"),
   priority: integer("priority").notNull().default(0),
   tags: json("tags").default([]).$type<string[]>(),
   analytics: json("analytics").default({}).$type<{
@@ -188,6 +189,23 @@ export const ApiKeySchema = pgTable("api_key", {
     .default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const CommunitySchema = pgTable("community", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  name: text("name").notNull(),
+  communityId: text("community_id").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => UserSchema.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const oauthApplication = pgTable("oauth_application", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name"),
@@ -231,6 +249,7 @@ export type TwitterAccountEntity = typeof TwitterAccountSchema.$inferSelect;
 export type TweetEntity = typeof TweetSchema.$inferSelect;
 export type TweetThreadEntity = typeof TweetThreadSchema.$inferSelect;
 export type ApiKeyEntity = typeof ApiKeySchema.$inferSelect;
+export type CommunityEntity = typeof CommunitySchema.$inferSelect;
 export type oauthApplicationEntity = typeof oauthApplication.$inferSelect;
 export type oauthAccessTokenEntity = typeof oauthAccessToken.$inferSelect;
 export type oauthConsentEntity = typeof oauthConsent.$inferSelect;
