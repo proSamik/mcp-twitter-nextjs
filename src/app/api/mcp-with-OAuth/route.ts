@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateApiKey } from "@/lib/auth/api-key";
+import { auth } from "@/lib/auth/server";
 import { pgDb as db } from "@/lib/db/pg/db.pg";
 import { TweetSchema, TwitterAccountSchema } from "@/lib/db/pg/schema.pg";
 import { eq, and } from "drizzle-orm";
@@ -9,14 +9,16 @@ import {
   broadcastTweetUpdated,
   broadcastTweetDeleted,
 } from "@/lib/websocket/server";
-import { scheduleTweetInternal } from '@/lib/twitter/schedule-tweet';
-import { postTweetInternal } from '@/lib/twitter/post-tweet';
-
+import { scheduleTweetInternal } from "@/lib/twitter/schedule-tweet";
+import { postTweetInternal } from "@/lib/twitter/post-tweet";
 
 /**
  * List all tweets for the authenticated user.
  */
-async function listTweets(args: { status?: string; limit?: number }, userId: string) {
+async function listTweets(
+  args: { status?: string; limit?: number },
+  userId: string,
+) {
   try {
     const { status, limit = 50 } = args;
     // Build where condition
@@ -41,7 +43,11 @@ async function listTweets(args: { status?: string; limit?: number }, userId: str
         createdAt: TweetSchema.createdAt,
       })
       .from(TweetSchema)
-      .where(whereConditions.length > 1 ? and(...whereConditions) : whereConditions[0])
+      .where(
+        whereConditions.length > 1
+          ? and(...whereConditions)
+          : whereConditions[0],
+      )
       .orderBy(TweetSchema.createdAt)
       .limit(limit);
 
@@ -88,7 +94,10 @@ async function createTweet(args: any, userId: string) {
         .select()
         .from(TwitterAccountSchema)
         .where(
-          and(eq(TwitterAccountSchema.userId, userId), eq(TwitterAccountSchema.id, twitterAccountId)),
+          and(
+            eq(TwitterAccountSchema.userId, userId),
+            eq(TwitterAccountSchema.id, twitterAccountId),
+          ),
         );
 
       if (!account) {
@@ -102,11 +111,18 @@ async function createTweet(args: any, userId: string) {
       const [account] = await db
         .select()
         .from(TwitterAccountSchema)
-        .where(and(eq(TwitterAccountSchema.userId, userId), eq(TwitterAccountSchema.isActive, true)))
+        .where(
+          and(
+            eq(TwitterAccountSchema.userId, userId),
+            eq(TwitterAccountSchema.isActive, true),
+          ),
+        )
         .limit(1);
-      
+
       if (!account) {
-        throw new Error("No active Twitter account found. Please connect a Twitter account first.");
+        throw new Error(
+          "No active Twitter account found. Please connect a Twitter account first.",
+        );
       }
       accountId = account.id;
     }
@@ -182,54 +198,68 @@ async function createTweet(args: any, userId: string) {
  */
 async function scheduleTweet(args: any, userId: string) {
   try {
-    const { nanoId, scheduledFor, timezone = 'UTC' } = args;
+    const { nanoId, scheduledFor, timezone = "UTC" } = args;
 
     // Find the tweet by nanoId
     const [tweet] = await db
       .select()
       .from(TweetSchema)
-      .where(and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)))
+      .where(
+        and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)),
+      )
       .limit(1);
 
     if (!tweet) {
       throw new Error(`Tweet with nanoId "${nanoId}" not found`);
     }
 
-    if (tweet.status !== 'draft') {
-      throw new Error('Only draft tweets can be scheduled');
+    if (tweet.status !== "draft") {
+      throw new Error("Only draft tweets can be scheduled");
     }
 
     // Parse the scheduled time in user's timezone
     // If scheduledFor doesn't include timezone info, treat it as user's local time
     let scheduleDate: Date;
-    if (scheduledFor.includes('T') && !scheduledFor.includes('Z') && !scheduledFor.includes('+')) {
+    if (
+      scheduledFor.includes("T") &&
+      !scheduledFor.includes("Z") &&
+      !scheduledFor.includes("+")
+    ) {
       // Local datetime format - convert from user's timezone to UTC
       const localDate = new Date(scheduledFor);
-      const utcDate = new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' }));
-      const userDate = new Date(localDate.toLocaleString('en-US', { timeZone: timezone }));
+      const utcDate = new Date(
+        localDate.toLocaleString("en-US", { timeZone: "UTC" }),
+      );
+      const userDate = new Date(
+        localDate.toLocaleString("en-US", { timeZone: timezone }),
+      );
       const timezoneOffset = userDate.getTime() - utcDate.getTime();
       scheduleDate = new Date(localDate.getTime() - timezoneOffset);
     } else {
       // Already UTC or has timezone info
       scheduleDate = new Date(scheduledFor);
     }
-    
+
     const now = new Date();
-    
+
     // Check if the scheduled time is valid
     if (isNaN(scheduleDate.getTime())) {
-      throw new Error('Invalid scheduled time format');
+      throw new Error("Invalid scheduled time format");
     }
-    
-    const delaySeconds = Math.floor((scheduleDate.getTime() - now.getTime()) / 1000);
-    console.log(`MCP Schedule: ${scheduledFor} (${timezone}) -> ${scheduleDate.toISOString()}, delay: ${delaySeconds}s`);
+
+    const delaySeconds = Math.floor(
+      (scheduleDate.getTime() - now.getTime()) / 1000,
+    );
+    console.log(
+      `MCP Schedule: ${scheduledFor} (${timezone}) -> ${scheduleDate.toISOString()}, delay: ${delaySeconds}s`,
+    );
 
     if (delaySeconds < 0) {
-      throw new Error('Scheduled time must be in the future');
+      throw new Error("Scheduled time must be in the future");
     }
 
     if (delaySeconds > 604800) {
-      throw new Error('You can only schedule tweets up to 7 days in advance');
+      throw new Error("You can only schedule tweets up to 7 days in advance");
     }
 
     // Schedule with QStash using internal logic
@@ -240,13 +270,14 @@ async function scheduleTweet(args: any, userId: string) {
       userId,
       twitterAccountId: tweet.twitterAccountId,
       mediaIds: tweet.mediaUrls || undefined,
-      isThread: tweet.tweetType === 'thread',
-      threadTweets: tweet.tweetType === 'thread' ? tweet.content.split('\n\n') : undefined,
+      isThread: tweet.tweetType === "thread",
+      threadTweets:
+        tweet.tweetType === "thread" ? tweet.content.split("\n\n") : undefined,
       delaySeconds, // Pass calculated delay to QStash
     });
 
     if (!scheduleResult.success) {
-      throw new Error(scheduleResult.error || 'Failed to schedule tweet');
+      throw new Error(scheduleResult.error || "Failed to schedule tweet");
     }
 
     // Update tweet to scheduled in database
@@ -311,7 +342,9 @@ async function deleteTweet(args: any, userId: string) {
         qstashMessageId: TweetSchema.qstashMessageId,
       })
       .from(TweetSchema)
-      .where(and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)))
+      .where(
+        and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)),
+      )
       .limit(1);
 
     if (!tweet) {
@@ -319,13 +352,13 @@ async function deleteTweet(args: any, userId: string) {
     }
 
     // Cancel QStash message if it's a scheduled tweet
-    if (tweet.status === 'scheduled' && tweet.qstashMessageId) {
+    if (tweet.status === "scheduled" && tweet.qstashMessageId) {
       try {
-        const { getTweetScheduler } = await import('@/lib/upstash/qstash');
+        const { getTweetScheduler } = await import("@/lib/upstash/qstash");
         console.log(`Cancelling QStash message: ${tweet.qstashMessageId}`);
         await getTweetScheduler().cancelScheduledTweet(tweet.qstashMessageId);
       } catch (error) {
-        console.warn('Failed to cancel QStash message:', error);
+        console.warn("Failed to cancel QStash message:", error);
         // Continue with deletion even if QStash cancellation fails
       }
     }
@@ -367,18 +400,20 @@ async function deleteTweet(args: any, userId: string) {
 async function postTweet(args: any, userId: string) {
   try {
     const { nanoId } = args;
-    
+
     // Find the tweet by nanoId
     const [tweet] = await db
       .select()
       .from(TweetSchema)
-      .where(and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)))
+      .where(
+        and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)),
+      )
       .limit(1);
-      
+
     if (!tweet) {
       throw new Error(`Tweet with nanoId "${nanoId}" not found`);
     }
-    
+
     if (tweet.status !== "draft") {
       throw new Error("Only draft tweets can be posted");
     }
@@ -387,22 +422,25 @@ async function postTweet(args: any, userId: string) {
     let postSuccess = false;
     let postResult: any = null;
     let lastError: any = null;
-    
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       postResult = await postTweetInternal({
         content: tweet.content,
         twitterAccountId: tweet.twitterAccountId,
         mediaIds: tweet.mediaUrls || undefined,
-        isThread: tweet.tweetType === 'thread',
-        threadTweets: tweet.tweetType === 'thread' ? tweet.content.split('\n\n') : undefined,
+        isThread: tweet.tweetType === "thread",
+        threadTweets:
+          tweet.tweetType === "thread"
+            ? tweet.content.split("\n\n")
+            : undefined,
         userId,
       });
-      
+
       if (postResult.success && postResult.twitterTweetId) {
         postSuccess = true;
         break;
       } else {
-        lastError = postResult.error || 'Unknown error';
+        lastError = postResult.error || "Unknown error";
         console.warn(`Post attempt ${attempt} failed:`, lastError);
       }
     }
@@ -422,13 +460,13 @@ async function postTweet(args: any, userId: string) {
       })
       .where(eq(TweetSchema.id, tweet.id))
       .returning();
-      
+
     try {
       broadcastTweetUpdated(updatedTweet as any, userId);
     } catch (error) {
       console.warn("Failed to broadcast tweet update:", error);
     }
-    
+
     return {
       content: [
         {
@@ -455,63 +493,77 @@ async function postTweet(args: any, userId: string) {
  */
 async function rescheduleTweet(args: any, userId: string) {
   try {
-    const { nanoId, newScheduledFor, timezone = 'UTC' } = args;
-    
+    const { nanoId, newScheduledFor, timezone = "UTC" } = args;
+
     // Find the tweet by nanoId
     const [tweet] = await db
       .select()
       .from(TweetSchema)
-      .where(and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)))
+      .where(
+        and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)),
+      )
       .limit(1);
-      
+
     if (!tweet) {
       throw new Error(`Tweet with nanoId "${nanoId}" not found`);
     }
-    
+
     if (tweet.status !== "scheduled") {
       throw new Error("Only scheduled tweets can be rescheduled");
     }
 
     // Parse the scheduled time in user's timezone
     let newScheduleDate: Date;
-    if (newScheduledFor.includes('T') && !newScheduledFor.includes('Z') && !newScheduledFor.includes('+')) {
+    if (
+      newScheduledFor.includes("T") &&
+      !newScheduledFor.includes("Z") &&
+      !newScheduledFor.includes("+")
+    ) {
       // Local datetime format - convert from user's timezone to UTC
       const localDate = new Date(newScheduledFor);
-      const utcDate = new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' }));
-      const userDate = new Date(localDate.toLocaleString('en-US', { timeZone: timezone }));
+      const utcDate = new Date(
+        localDate.toLocaleString("en-US", { timeZone: "UTC" }),
+      );
+      const userDate = new Date(
+        localDate.toLocaleString("en-US", { timeZone: timezone }),
+      );
       const timezoneOffset = userDate.getTime() - utcDate.getTime();
       newScheduleDate = new Date(localDate.getTime() - timezoneOffset);
     } else {
       // Already UTC or has timezone info
       newScheduleDate = new Date(newScheduledFor);
     }
-    
+
     const now = new Date();
-    
+
     // Check if the scheduled time is valid
     if (isNaN(newScheduleDate.getTime())) {
-      throw new Error('Invalid scheduled time format');
+      throw new Error("Invalid scheduled time format");
     }
-    
-    const delaySeconds = Math.floor((newScheduleDate.getTime() - now.getTime()) / 1000);
-    console.log(`MCP Reschedule: ${newScheduledFor} (${timezone}) -> ${newScheduleDate.toISOString()}, delay: ${delaySeconds}s`);
+
+    const delaySeconds = Math.floor(
+      (newScheduleDate.getTime() - now.getTime()) / 1000,
+    );
+    console.log(
+      `MCP Reschedule: ${newScheduledFor} (${timezone}) -> ${newScheduleDate.toISOString()}, delay: ${delaySeconds}s`,
+    );
 
     if (delaySeconds < 0) {
-      throw new Error('New scheduled time must be in the future');
+      throw new Error("New scheduled time must be in the future");
     }
 
     if (delaySeconds > 604800) {
-      throw new Error('You can only schedule tweets up to 7 days in advance');
+      throw new Error("You can only schedule tweets up to 7 days in advance");
     }
 
     // Cancel existing QStash message if it exists
     if (tweet.qstashMessageId) {
       try {
-        const { getTweetScheduler } = await import('@/lib/upstash/qstash');
+        const { getTweetScheduler } = await import("@/lib/upstash/qstash");
         console.log(`Cancelling old QStash message: ${tweet.qstashMessageId}`);
         await getTweetScheduler().cancelScheduledTweet(tweet.qstashMessageId);
       } catch (error) {
-        console.warn('Failed to cancel old QStash message:', error);
+        console.warn("Failed to cancel old QStash message:", error);
         // Continue with rescheduling even if cancellation fails
       }
     }
@@ -524,12 +576,13 @@ async function rescheduleTweet(args: any, userId: string) {
       userId,
       twitterAccountId: tweet.twitterAccountId,
       mediaIds: tweet.mediaUrls || undefined,
-      isThread: tweet.tweetType === 'thread',
-      threadTweets: tweet.tweetType === 'thread' ? tweet.content.split('\n\n') : undefined,
+      isThread: tweet.tweetType === "thread",
+      threadTweets:
+        tweet.tweetType === "thread" ? tweet.content.split("\n\n") : undefined,
     });
 
     if (!scheduleResult.success) {
-      throw new Error(scheduleResult.error || 'Failed to reschedule tweet');
+      throw new Error(scheduleResult.error || "Failed to reschedule tweet");
     }
 
     // Update tweet with new schedule time
@@ -542,13 +595,13 @@ async function rescheduleTweet(args: any, userId: string) {
       })
       .where(eq(TweetSchema.id, tweet.id))
       .returning();
-      
+
     try {
       broadcastTweetUpdated(updatedTweet as any, userId);
     } catch (error) {
       console.warn("Failed to broadcast tweet update:", error);
     }
-    
+
     return {
       content: [
         {
@@ -571,57 +624,71 @@ async function rescheduleTweet(args: any, userId: string) {
 }
 
 /**
- * Convert a draft to scheduled tweet 
+ * Convert a draft to scheduled tweet
  */
 async function convertDraftToScheduled(args: any, userId: string) {
   try {
-    const { nanoId, scheduledFor, timezone = 'UTC' } = args;
-    
+    const { nanoId, scheduledFor, timezone = "UTC" } = args;
+
     // Find the tweet by nanoId
     const [tweet] = await db
       .select()
       .from(TweetSchema)
-      .where(and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)))
+      .where(
+        and(eq(TweetSchema.userId, userId), eq(TweetSchema.nanoId, nanoId)),
+      )
       .limit(1);
-      
+
     if (!tweet) {
       throw new Error(`Tweet with nanoId "${nanoId}" not found`);
     }
-    
+
     if (tweet.status !== "draft") {
       throw new Error("Only draft tweets can be converted to scheduled");
     }
 
     // Parse the scheduled time in user's timezone
     let scheduleDate: Date;
-    if (scheduledFor.includes('T') && !scheduledFor.includes('Z') && !scheduledFor.includes('+')) {
+    if (
+      scheduledFor.includes("T") &&
+      !scheduledFor.includes("Z") &&
+      !scheduledFor.includes("+")
+    ) {
       // Local datetime format - convert from user's timezone to UTC
       const localDate = new Date(scheduledFor);
-      const utcDate = new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' }));
-      const userDate = new Date(localDate.toLocaleString('en-US', { timeZone: timezone }));
+      const utcDate = new Date(
+        localDate.toLocaleString("en-US", { timeZone: "UTC" }),
+      );
+      const userDate = new Date(
+        localDate.toLocaleString("en-US", { timeZone: timezone }),
+      );
       const timezoneOffset = userDate.getTime() - utcDate.getTime();
       scheduleDate = new Date(localDate.getTime() - timezoneOffset);
     } else {
       // Already UTC or has timezone info
       scheduleDate = new Date(scheduledFor);
     }
-    
+
     const now = new Date();
-    
+
     // Check if the scheduled time is valid
     if (isNaN(scheduleDate.getTime())) {
-      throw new Error('Invalid scheduled time format');
+      throw new Error("Invalid scheduled time format");
     }
-    
-    const delaySeconds = Math.floor((scheduleDate.getTime() - now.getTime()) / 1000);
-    console.log(`MCP Convert to Schedule: ${scheduledFor} (${timezone}) -> ${scheduleDate.toISOString()}, delay: ${delaySeconds}s`);
+
+    const delaySeconds = Math.floor(
+      (scheduleDate.getTime() - now.getTime()) / 1000,
+    );
+    console.log(
+      `MCP Convert to Schedule: ${scheduledFor} (${timezone}) -> ${scheduleDate.toISOString()}, delay: ${delaySeconds}s`,
+    );
 
     if (delaySeconds < 0) {
-      throw new Error('Scheduled time must be in the future');
+      throw new Error("Scheduled time must be in the future");
     }
 
     if (delaySeconds > 604800) {
-      throw new Error('You can only schedule tweets up to 7 days in advance');
+      throw new Error("You can only schedule tweets up to 7 days in advance");
     }
 
     // Schedule with QStash using internal logic
@@ -632,12 +699,13 @@ async function convertDraftToScheduled(args: any, userId: string) {
       userId,
       twitterAccountId: tweet.twitterAccountId,
       mediaIds: tweet.mediaUrls || undefined,
-      isThread: tweet.tweetType === 'thread',
-      threadTweets: tweet.tweetType === 'thread' ? tweet.content.split('\n\n') : undefined,
+      isThread: tweet.tweetType === "thread",
+      threadTweets:
+        tweet.tweetType === "thread" ? tweet.content.split("\n\n") : undefined,
     });
 
     if (!scheduleResult.success) {
-      throw new Error(scheduleResult.error || 'Failed to schedule tweet');
+      throw new Error(scheduleResult.error || "Failed to schedule tweet");
     }
 
     // Update tweet to scheduled
@@ -651,13 +719,13 @@ async function convertDraftToScheduled(args: any, userId: string) {
       })
       .where(eq(TweetSchema.id, tweet.id))
       .returning();
-      
+
     try {
       broadcastTweetUpdated(updatedTweet as any, userId);
     } catch (error) {
       console.warn("Failed to broadcast tweet update:", error);
     }
-    
+
     return {
       content: [
         {
@@ -687,19 +755,18 @@ async function convertDraftToPosted(args: any, userId: string) {
 }
 
 /**
- * Authenticate API requests using Bearer token and return user info.
+ * Authenticate MCP requests using Better Auth session
  * @param request Next.js request object
- * @returns user object or null
+ * @returns session object or null
  */
 async function authenticateRequest(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const session = await auth.api.getMcpSession({
+    headers: request.headers,
+  });
+  if (!session) {
     return null;
   }
-  const token = authHeader.substring(7);
-  const user = await validateApiKey(token);
-  if (!user) return null;
-  return user;
+  return session;
 }
 
 /**
@@ -709,20 +776,11 @@ async function authenticateRequest(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Authenticate the request
-    const user = await authenticateRequest(request);
-    if (!user) {
-      return NextResponse.json(
-        {
-          jsonrpc: "2.0",
-          error: {
-            code: -32001,
-            message:
-              "Authentication required: Please provide a valid API key in Authorization header",
-          },
-          id: null,
-        },
-        { status: 401 },
-      );
+    const session = await authenticateRequest(request);
+    if (!session) {
+      return new Response(null, {
+        status: 401,
+      });
     }
 
     // Parse the JSON-RPC request
@@ -758,6 +816,15 @@ export async function POST(request: NextRequest) {
           id,
         });
 
+      case "resources/list":
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          result: {
+            resources: [],
+          },
+          id,
+        });
+
       case "tools/list":
         return NextResponse.json({
           jsonrpc: "2.0",
@@ -778,7 +845,8 @@ export async function POST(request: NextRequest) {
                     },
                     limit: {
                       type: "number",
-                      description: "Maximum number of tweets to return (default: 50)",
+                      description:
+                        "Maximum number of tweets to return (default: 50)",
                     },
                   },
                   required: [],
@@ -811,7 +879,8 @@ export async function POST(request: NextRequest) {
                     scheduledFor: {
                       type: "string",
                       format: "date-time",
-                      description: "ISO date string for when to post (for scheduled tweets)",
+                      description:
+                        "ISO date string for when to post (for scheduled tweets)",
                     },
                     hashtags: {
                       type: "array",
@@ -830,7 +899,8 @@ export async function POST(request: NextRequest) {
                     },
                     twitterAccountId: {
                       type: "string",
-                      description: "ID of Twitter account to use (optional, uses first active account if not provided)",
+                      description:
+                        "ID of Twitter account to use (optional, uses first active account if not provided)",
                     },
                   },
                   required: ["content"],
@@ -851,12 +921,14 @@ export async function POST(request: NextRequest) {
                     scheduledFor: {
                       type: "string",
                       format: "date-time",
-                      description: "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
+                      description:
+                        "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
                     },
                     timezone: {
                       type: "string",
-                      description: "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-                      default: "UTC"
+                      description:
+                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
+                      default: "UTC",
                     },
                   },
                   required: ["nanoId", "scheduledFor"],
@@ -865,7 +937,8 @@ export async function POST(request: NextRequest) {
               // delete tweets
               {
                 name: "delete_tweet",
-                description: "🗑️ DELETE TWEET: Permanently delete a tweet by nanoId. Works for drafts, scheduled tweets (will cancel QStash scheduling), and posted tweets. Use this to remove unwanted content.",
+                description:
+                  "🗑️ DELETE TWEET: Permanently delete a tweet by nanoId. Works for drafts, scheduled tweets (will cancel QStash scheduling), and posted tweets. Use this to remove unwanted content.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -880,7 +953,8 @@ export async function POST(request: NextRequest) {
               // post tweet
               {
                 name: "post_tweet",
-                description: "🚀 POST TWEET NOW: Immediately post a DRAFT tweet to Twitter. Only works with tweets that have status='draft'. Use this to publish content right away.",
+                description:
+                  "🚀 POST TWEET NOW: Immediately post a DRAFT tweet to Twitter. Only works with tweets that have status='draft'. Use this to publish content right away.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -895,23 +969,27 @@ export async function POST(request: NextRequest) {
               // reschedule tweet
               {
                 name: "reschedule_tweet",
-                description: "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling.",
+                description:
+                  "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling.",
                 inputSchema: {
                   type: "object",
                   properties: {
                     nanoId: {
                       type: "string",
-                      description: "Unique nanoId of the scheduled tweet to reschedule",
+                      description:
+                        "Unique nanoId of the scheduled tweet to reschedule",
                     },
                     newScheduledFor: {
                       type: "string",
                       format: "date-time",
-                      description: "New date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
+                      description:
+                        "New date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
                     },
                     timezone: {
                       type: "string",
-                      description: "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-                      default: "UTC"
+                      description:
+                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
+                      default: "UTC",
                     },
                   },
                   required: ["nanoId", "newScheduledFor"],
@@ -920,23 +998,27 @@ export async function POST(request: NextRequest) {
               // convert draft to scheduled
               {
                 name: "convert_draft_to_scheduled",
-                description: "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
+                description:
+                  "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
                 inputSchema: {
                   type: "object",
                   properties: {
                     nanoId: {
                       type: "string",
-                      description: "Unique nanoId of the draft tweet to convert",
+                      description:
+                        "Unique nanoId of the draft tweet to convert",
                     },
                     scheduledFor: {
                       type: "string",
                       format: "date-time",
-                      description: "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
+                      description:
+                        "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
                     },
                     timezone: {
                       type: "string",
-                      description: "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-                      default: "UTC"
+                      description:
+                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
+                      default: "UTC",
                     },
                   },
                   required: ["nanoId", "scheduledFor"],
@@ -945,7 +1027,8 @@ export async function POST(request: NextRequest) {
               // convert draft to posted
               {
                 name: "convert_draft_to_posted",
-                description: "📢 CONVERT DRAFT TO POSTED: Transform a DRAFT tweet into a POSTED tweet (immediately publish to Twitter). This is the PREFERRED way to post new content - first create a draft, then convert it to posted.",
+                description:
+                  "📢 CONVERT DRAFT TO POSTED: Transform a DRAFT tweet into a POSTED tweet (immediately publish to Twitter). This is the PREFERRED way to post new content - first create a draft, then convert it to posted.",
                 inputSchema: {
                   type: "object",
                   properties: {
@@ -970,28 +1053,28 @@ export async function POST(request: NextRequest) {
           let result: any;
           switch (toolName) {
             case "list_tweets":
-              result = await listTweets(toolArgs, user.userId);
+              result = await listTweets(toolArgs, session.userId);
               break;
             case "create_tweet":
-              result = await createTweet(toolArgs, user.userId);
+              result = await createTweet(toolArgs, session.userId);
               break;
             case "schedule_tweet":
-              result = await scheduleTweet(toolArgs, user.userId);
+              result = await scheduleTweet(toolArgs, session.userId);
               break;
             case "delete_tweet":
-              result = await deleteTweet(toolArgs, user.userId);
+              result = await deleteTweet(toolArgs, session.userId);
               break;
             case "post_tweet":
-              result = await postTweet(toolArgs, user.userId);
+              result = await postTweet(toolArgs, session.userId);
               break;
             case "reschedule_tweet":
-              result = await rescheduleTweet(toolArgs, user.userId);
+              result = await rescheduleTweet(toolArgs, session.userId);
               break;
             case "convert_draft_to_scheduled":
-              result = await convertDraftToScheduled(toolArgs, user.userId);
+              result = await convertDraftToScheduled(toolArgs, session.userId);
               break;
             case "convert_draft_to_posted":
-              result = await convertDraftToPosted(toolArgs, user.userId);
+              result = await convertDraftToPosted(toolArgs, session.userId);
               break;
             default:
               throw new Error(`Tool ${toolName} not found`);
@@ -1049,15 +1132,11 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Authenticate the request
-    const user = await authenticateRequest(request);
-    if (!user) {
-      return NextResponse.json(
-        {
-          error:
-            "Authentication required: Please provide a valid API key in Authorization header",
-        },
-        { status: 401 },
-      );
+    const session = await authenticateRequest(request);
+    if (!session) {
+      return new Response(null, {
+        status: 401,
+      });
     }
 
     // Check if client accepts Server-Sent Events

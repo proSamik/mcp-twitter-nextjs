@@ -3,19 +3,17 @@
 import { enhancedAuthClient } from "auth/client";
 import { authClient } from "auth/client";
 import { useEffect, useState, Suspense, useRef } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "ui/card";
+import { Card, CardContent, CardHeader } from "ui/card";
 import { Badge } from "ui/badge";
 import { Crown, CreditCard } from "lucide-react";
 import { Skeleton } from "ui/skeleton";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ConnectedAccounts } from "@/components/twitter/connected-accounts";
-import { TweetComposer } from "@/components/twitter/tweet-composer";
+import { TextTweetComposer } from "@/components/twitter/text-composer/text-tweet-composer";
+import { MediaTweetComposer } from "@/components/twitter/media-composer/media-tweet-composer";
 import { TweetList } from "@/components/twitter/tweet-list";
+// UsageDisplay removed - not available for basic Twitter API
 
 type Order = {
   id: string;
@@ -237,7 +235,11 @@ function DashboardContent() {
           { name: "MCP Integration", enabled: true, limit: "Claude AI access" },
           { name: "Bulk Operations", enabled: true, limit: "Mass scheduling" },
           { name: "Content Calendar", enabled: true, limit: "Full planning" },
-          { name: "AI Optimization", enabled: true, limit: "Smart suggestions" },
+          {
+            name: "AI Optimization",
+            enabled: true,
+            limit: "Smart suggestions",
+          },
           { name: "Priority Support", enabled: true, limit: "Dedicated line" },
           {
             name: "Lifetime Updates",
@@ -279,21 +281,21 @@ function DashboardContent() {
       </div>
 
       {/* Twitter Management Dashboard */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-6">
         {/* Connected X Accounts */}
-        <div className="col-span-full lg:col-span-1">
-          <ConnectedAccounts />
-        </div>
+        <ConnectedAccounts />
 
-        {/* Tweet Composer & Scheduler */}
-        <div className="col-span-full lg:col-span-2">
-          <TweetComposer userId={session?.user?.id} />
+        {/* Tweet Composers - Text & Media */}
+        <div className="space-y-6 max-w-2xl mx-auto">
+          {/* Text Tweet Composer */}
+          <TextTweetComposer userId={session?.user.id} />
+
+          {/* Media Tweet Composer */}
+          <MediaTweetComposer userId={session?.user?.id} />
         </div>
 
         {/* Tweet Management - Dynamic list with real data */}
-        <div className="col-span-full">
-          <TweetList userId={session?.user?.id || ""} />
-        </div>
+        <TweetList userId={session?.user?.id || ""} />
       </div>
     </div>
   );

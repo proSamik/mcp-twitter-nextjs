@@ -22,6 +22,27 @@
       "when": 1752568213856,
       "tag": "0002_handy_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1752642067116,
+      "tag": "0003_talented_umar",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1752677179160,
+      "tag": "0004_lush_pestilence",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1752911609883,
+      "tag": "0005_yielding_siren",
+      "breakpoints": true
     }
   ]
 }
