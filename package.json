@@ -109,6 +109,7 @@
     "react-image-crop": "^11.0.10",
     "react-resizable-panels": "^2.1.9",
     "react-tweet": "^3.2.2",
+    "react-twitter-embed": "^4.0.4",
     "recharts": "^3.1.0",
     "server-only": "^0.0.1",
     "shiki": "^3.4.2",
