@@ -41,12 +41,14 @@ export async function POST(request: NextRequest) {
     const key = r2Client.generateFileKey(file.name, userId, "tweet-media");
 
     // Upload to R2
+    console.log(`Uploading file to R2 with key: ${key}`);
     const uploadResult = await r2Client.uploadFile(key, buffer, file.type, {
       originalName: file.name,
       userId,
       uploadedAt: new Date().toISOString(),
       mediaType,
     });
+    console.log(`Upload successful:`, uploadResult);
 
     return NextResponse.json({
       success: true,

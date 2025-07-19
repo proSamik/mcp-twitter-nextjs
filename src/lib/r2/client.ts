@@ -22,7 +22,7 @@ export interface UploadResult {
 }
 
 export class R2Client {
-  private s3Client: S3Client;
+  public s3Client: S3Client;
   private bucketName: string;
   private publicUrl?: string;
 
@@ -50,6 +50,11 @@ export class R2Client {
     metadata?: Record<string, string>,
   ): Promise<UploadResult> {
     try {
+      console.log(`[R2] Uploading file with key: ${key}`);
+      console.log(`[R2] Bucket: ${this.bucketName}`);
+      console.log(`[R2] Content-Type: ${contentType}`);
+      console.log(`[R2] Buffer size: ${buffer.length} bytes`);
+
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: key,
@@ -58,7 +63,8 @@ export class R2Client {
         Metadata: metadata,
       });
 
-      await this.s3Client.send(command);
+      const result = await this.s3Client.send(command);
+      console.log(`[R2] Upload successful, ETag: ${result.ETag}`);
 
       const url = this.publicUrl
         ? `${this.publicUrl}/${key}`
@@ -119,12 +125,21 @@ export class R2Client {
     expiresIn: number = 3600,
   ): Promise<string> {
     try {
+      console.log(`[R2] Generating presigned URL for key: ${key}`);
+      console.log(`[R2] Bucket: ${this.bucketName}`);
+      console.log(`[R2] Expires in: ${expiresIn} seconds`);
+
       const command = new GetObjectCommand({
         Bucket: this.bucketName,
         Key: key,
       });
 
-      return await getSignedUrl(this.s3Client, command, { expiresIn });
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn,
+      });
+      console.log(`[R2] Generated signed URL: ${signedUrl}`);
+
+      return signedUrl;
     } catch (error) {
       console.error("Error generating presigned URL:", error);
       throw new Error(

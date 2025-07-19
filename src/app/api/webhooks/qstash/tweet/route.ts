@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
     } = payload;
 
     console.log(`Processing scheduled tweet: ${tweetId} for user: ${userId}`);
+    console.log("Webhook payload:", JSON.stringify(payload, null, 2));
 
     try {
       // Get the tweet from database

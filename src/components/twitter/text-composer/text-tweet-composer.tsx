@@ -484,14 +484,6 @@ export function TextTweetComposer({ userId }: TextTweetComposerProps = {}) {
                       <label className="text-sm font-medium">
                         Thread ({threadTweets.length} tweets)
                       </label>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={addThreadTweet}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add Tweet
-                      </Button>
                     </div>
                     {threadTweets.map((tweet, index) => (
                       <div key={index} className="space-y-2">
@@ -524,6 +516,18 @@ export function TextTweetComposer({ userId }: TextTweetComposerProps = {}) {
                         />
                       </div>
                     ))}
+                    {/* Add Tweet Button - moved to bottom */}
+                    <div className="flex justify-center pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addThreadTweet}
+                        className="w-full max-w-xs"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Tweet
+                      </Button>
+                    </div>
                   </div>
                 )}
 

@@ -104,7 +104,11 @@ export async function POST(request: NextRequest) {
           status: status,
           postedAt: status === "posted" ? new Date() : null,
           twitterTweetId,
-          mediaUrls: mediaIds || [],
+          mediaUrls: isThread
+            ? threadData && threadData.length > 0
+              ? threadData.flatMap((tweet: any) => tweet.mediaIds || [])
+              : []
+            : mediaIds || [],
           hashtags: extractHashtags(
             isThread
               ? threadData && threadData.length > 0

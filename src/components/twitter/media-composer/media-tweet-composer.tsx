@@ -37,6 +37,7 @@ import {
   X,
   Play,
   AlertCircle,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTwitterWebSocket } from "@/lib/websocket/client";
@@ -87,6 +88,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [posting, setPosting] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Set up WebSocket for real-time feedback
   useTwitterWebSocket(userId || null, {
@@ -665,7 +667,10 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
               ? undefined
               : selectedCommunity || undefined,
           mediaIds: !isThread
-            ? mediaFiles.map((file) => file.r2Key).filter(Boolean)
+            ? mediaFiles
+                .filter((file) => file.uploaded)
+                .map((file) => file.r2Key)
+                .filter(Boolean)
             : undefined,
           hasMedia: isThread
             ? threadTweets.some((t) => t.mediaFiles.length > 0)
@@ -779,7 +784,6 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
           .map((tweet) => ({
             content: tweet.content,
             mediaIds: tweet.mediaFiles
-              .filter((file) => file.uploaded)
               .map((file) => file.r2Key)
               .filter((key): key is string => Boolean(key)),
           }));
@@ -827,14 +831,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         setSelectedCommunity("none");
         setScheduleDateTime("");
         setIsScheduled(false);
-        // Clean up media files after successful schedule
-        if (isThread) {
-          for (const tweet of threadTweets) {
-            await cleanupTweetMediaFiles(tweet.mediaFiles);
-          }
-        } else {
-          await cleanupMediaFiles();
-        }
+        // Don't clean up media files for scheduled tweets - they're saved with the schedule
       } else {
         toast.error(data.error || "Failed to schedule tweet");
       }
@@ -846,9 +843,101 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     }
   };
 
+  const handleSaveDraft = async () => {
+    const contentToSave = isThread
+      ? threadTweets
+          .filter((t) => t.content.trim() || t.mediaFiles.length > 0)
+          .map((t) => t.content)
+          .join("\n\n")
+      : content;
+
+    if (
+      !contentToSave.trim() &&
+      (isThread
+        ? !threadTweets.some((t) => t.mediaFiles.length > 0)
+        : mediaFiles.length === 0)
+    ) {
+      toast.error("Tweet content or media is required");
+      return;
+    }
+
+    if (!selectedAccount) {
+      toast.error("Please select a Twitter account");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      let threadData: { content: string; mediaIds: string[] }[] | undefined;
+      if (isThread) {
+        threadData = threadTweets
+          .filter((t) => t.content.trim() || t.mediaFiles.length > 0)
+          .map((tweet) => ({
+            content: tweet.content,
+            mediaIds: tweet.mediaFiles
+              .filter((file) => file.uploaded)
+              .map((file) => file.r2Key)
+              .filter((key): key is string => Boolean(key)),
+          }));
+      }
+
+      const response = await fetch("/api/twitter/post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: isThread ? null : content,
+          isThread,
+          threadTweets: isThread ? undefined : undefined,
+          threadData: isThread ? threadData : undefined,
+          twitterAccountId: selectedAccount,
+          communityId:
+            selectedCommunity === "none"
+              ? undefined
+              : selectedCommunity || undefined,
+          mediaIds: !isThread
+            ? mediaFiles
+                .filter((file) => file.uploaded)
+                .map((file) => file.r2Key)
+                .filter(Boolean)
+            : undefined,
+          hasMedia: isThread
+            ? threadTweets.some((t) => t.mediaFiles.length > 0)
+            : mediaFiles.length > 0,
+          saveDraft: true,
+          status: "draft",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Draft saved successfully!");
+        setContent("");
+        setThreadTweets([{ content: "", mediaFiles: [] }]);
+        setMediaFiles([]);
+        setSelectedCommunity("none");
+        // Don't clean up media files for drafts - they're saved with the draft
+      } else {
+        toast.error(data.error || "Failed to save draft");
+      }
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      toast.error("Failed to save draft");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const currentContent = isThread
     ? threadTweets.map((t) => t.content).join("\n\n")
     : content;
+
+  // Check if any media is currently uploading
+  const hasUploadingMedia = isThread
+    ? threadTweets.some((t) => t.mediaFiles.some((f) => f.uploading))
+    : mediaFiles.some((file) => file.uploading);
   const characterCount = getCharacterCount(currentContent);
   const hashtags = extractHashtags(currentContent);
   const mentions = extractMentions(currentContent);
@@ -1106,14 +1195,6 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                       <label className="text-sm font-medium">
                         Thread ({threadTweets.length} tweets)
                       </label>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={addThreadTweet}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add Tweet
-                      </Button>
                     </div>
                     {threadTweets.map((tweet, tweetIndex) => (
                       <div
@@ -1309,6 +1390,18 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                         )}
                       </div>
                     ))}
+                    {/* Add Tweet Button - moved to bottom */}
+                    <div className="flex justify-center pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addThreadTweet}
+                        className="w-full max-w-xs"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Tweet
+                      </Button>
+                    </div>
                   </div>
                 )}
 
@@ -1364,6 +1457,29 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 pt-4">
                   <Button
+                    onClick={handleSaveDraft}
+                    variant="outline"
+                    disabled={
+                      (!currentContent.trim() &&
+                        (isThread
+                          ? !threadTweets.some((t) => t.mediaFiles.length > 0)
+                          : mediaFiles.length === 0)) ||
+                      !selectedAccount ||
+                      saving ||
+                      hasUploadingMedia ||
+                      (isThread
+                        ? threadTweets.some((t) =>
+                            t.mediaFiles.some((f) => f.error),
+                          )
+                        : mediaFiles.some((file) => file.error))
+                    }
+                    className="flex-1"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {saving ? "Saving..." : "Save Draft"}
+                  </Button>
+
+                  <Button
                     onClick={() => setIsScheduled(!isScheduled)}
                     variant="outline"
                     className="flex-1"
@@ -1383,6 +1499,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                         !selectedAccount ||
                         !scheduleDateTime ||
                         scheduling ||
+                        hasUploadingMedia ||
                         (isThread
                           ? threadTweets.some((t) =>
                               t.mediaFiles.some((f) => f.error),
@@ -1404,6 +1521,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                             : mediaFiles.length === 0)) ||
                         !selectedAccount ||
                         posting ||
+                        hasUploadingMedia ||
                         (isThread
                           ? threadTweets.some((t) =>
                               t.mediaFiles.some((f) => f.error),

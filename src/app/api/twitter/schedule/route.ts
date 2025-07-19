@@ -147,14 +147,34 @@ export async function POST(request: NextRequest) {
       .insert(TweetSchema)
       .values({
         nanoId,
-        content: isThread ? threadTweets.join("\n\n") : content,
+        content: isThread
+          ? threadData && threadData.length > 0
+            ? threadData.map((tweet: any) => tweet.content).join("\n\n")
+            : threadTweets?.join("\n\n") || ""
+          : content,
         tweetType: isThread ? "thread" : "single",
         status: "scheduled",
         scheduledFor: scheduleDate,
         qstashMessageId: scheduleResult.messageId, // Store QStash message ID
-        mediaUrls: mediaIds || [],
-        hashtags: extractHashtags(content),
-        mentions: extractMentions(content),
+        mediaUrls: isThread
+          ? threadData && threadData.length > 0
+            ? threadData.flatMap((tweet: any) => tweet.mediaIds || [])
+            : []
+          : mediaIds || [],
+        hashtags: extractHashtags(
+          isThread
+            ? threadData && threadData.length > 0
+              ? threadData.map((tweet: any) => tweet.content).join("\n\n")
+              : threadTweets?.join("\n\n") || ""
+            : content,
+        ),
+        mentions: extractMentions(
+          isThread
+            ? threadData && threadData.length > 0
+              ? threadData.map((tweet: any) => tweet.content).join("\n\n")
+              : threadTweets?.join("\n\n") || ""
+            : content,
+        ),
         tags,
         twitterAccountId,
         userId,
