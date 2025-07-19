@@ -12,6 +12,7 @@ export async function postTweetInternal(params: {
   mediaIds?: string[];
   isThread?: boolean;
   threadTweets?: string[];
+  threadData?: { content: string; mediaIds: string[] }[];
   userId: string;
   replyToTweetId?: string;
   quoteTweetId?: string;
@@ -25,6 +26,7 @@ export async function postTweetInternal(params: {
       mediaIds,
       isThread,
       threadTweets,
+      threadData,
       userId,
       replyToTweetId,
       quoteTweetId,
@@ -60,9 +62,42 @@ export async function postTweetInternal(params: {
 
     let twitterTweetId: string | undefined;
     let postedTweets: any[] = [];
-    if (isThread && threadTweets && threadTweets.length > 1) {
+    if (
+      isThread &&
+      ((threadTweets && threadTweets.length > 1) ||
+        (threadData && threadData.length > 1))
+    ) {
+      let tweetsToPost: string[];
+      let mediaIdsPerTweet: string[][] | undefined;
+
+      if (threadData && threadData.length > 0) {
+        // New format with per-tweet media
+        tweetsToPost = threadData.map((tweet) => tweet.content);
+
+        // Process media for each tweet
+        const allMediaIds: string[][] = [];
+        for (const tweet of threadData) {
+          if (tweet.mediaIds && tweet.mediaIds.length > 0) {
+            const processedMediaIds =
+              await mediaProcessor.processMediaForTwitter(
+                tweet.mediaIds,
+                twitterClient,
+              );
+            allMediaIds.push(processedMediaIds);
+          } else {
+            allMediaIds.push([]);
+          }
+        }
+        mediaIdsPerTweet = allMediaIds;
+      } else {
+        // Legacy format
+        tweetsToPost = threadTweets!;
+        mediaIdsPerTweet =
+          twitterMediaIds.length > 0 ? [twitterMediaIds] : undefined;
+      }
+
       const threadOptions: any = {
-        mediaIds: twitterMediaIds.length > 0 ? [twitterMediaIds] : undefined, // First tweet gets media
+        mediaIds: mediaIdsPerTweet,
       };
 
       // Only add communityId if it's not "none"
@@ -71,7 +106,7 @@ export async function postTweetInternal(params: {
       }
 
       const results = await twitterClient.postThread(
-        threadTweets,
+        tweetsToPost,
         threadOptions,
       );
       postedTweets = results;

@@ -32,11 +32,12 @@ export async function POST(request: NextRequest) {
       mediaIds,
       isThread,
       threadTweets,
+      threadData, // New format: [{ content: string, mediaIds: string[] }]
       tags = [],
     } = body;
 
     // Validate required fields
-    if (!content && !threadTweets?.length) {
+    if (!content && !threadTweets?.length && !threadData?.length) {
       return NextResponse.json(
         { error: "Tweet content is required" },
         { status: 400 },
@@ -119,12 +120,17 @@ export async function POST(request: NextRequest) {
     const scheduleResult = await scheduleTweetInternal({
       nanoId,
       scheduleDate,
-      content: isThread ? threadTweets.join("\n\n") : content,
+      content: isThread
+        ? threadData
+          ? threadData.map((t) => t.content).join("\n\n")
+          : threadTweets?.join("\n\n")
+        : content,
       userId,
       twitterAccountId,
       mediaIds,
       isThread,
       threadTweets,
+      threadData,
       delaySeconds, // Pass client-calculated delay
     });
     if (!scheduleResult.success) {

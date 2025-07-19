@@ -1,4 +1,4 @@
-import { Client, Receiver } from '@upstash/qstash';
+import { Client, Receiver } from "@upstash/qstash";
 
 /**
  * QStash client for reliable tweet scheduling
@@ -12,7 +12,7 @@ class UpstashQStash {
   static getClient(): Client {
     if (!this.instance) {
       if (!process.env.QSTASH_TOKEN) {
-        throw new Error('QSTASH_TOKEN is required');
+        throw new Error("QSTASH_TOKEN is required");
       }
 
       this.instance = new Client({
@@ -53,14 +53,15 @@ export class TweetScheduler {
       mediaIds?: string[];
       isThread?: boolean;
       threadTweets?: string[];
+      threadData?: { content: string; mediaIds: string[] }[];
     },
-    delaySeconds?: number // Optional pre-calculated delay
+    delaySeconds?: number, // Optional pre-calculated delay
   ): Promise<{ messageId: string }> {
     try {
-      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/tweet`;
-      
+      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/webhooks/qstash/tweet`;
+
       const payload = {
-        type: 'tweet',
+        type: "tweet",
         tweetId,
         ...tweetData,
       };
@@ -69,34 +70,42 @@ export class TweetScheduler {
       let finalDelaySeconds: number;
       if (delaySeconds !== undefined) {
         finalDelaySeconds = Math.max(0, delaySeconds);
-        console.log(`QStash scheduling: using client delay=${finalDelaySeconds}s, scheduledFor=${scheduledFor.toISOString()}`);
+        console.log(
+          `QStash scheduling: using client delay=${finalDelaySeconds}s, scheduledFor=${scheduledFor.toISOString()}`,
+        );
       } else {
         // Fallback calculation
         const now = new Date();
         const delayMs = scheduledFor.getTime() - now.getTime();
         finalDelaySeconds = Math.max(0, Math.floor(delayMs / 1000));
-        
+
         if (delayMs < 0) {
-          throw new Error(`Cannot schedule in the past. Scheduled: ${scheduledFor.toISOString()}, Now: ${now.toISOString()}`);
+          throw new Error(
+            `Cannot schedule in the past. Scheduled: ${scheduledFor.toISOString()}, Now: ${now.toISOString()}`,
+          );
         }
-        console.log(`QStash scheduling: calculated delay=${finalDelaySeconds}s (${delayMs}ms), scheduledFor=${scheduledFor.toISOString()}, now=${now.toISOString()}`);
+        console.log(
+          `QStash scheduling: calculated delay=${finalDelaySeconds}s (${delayMs}ms), scheduledFor=${scheduledFor.toISOString()}, now=${now.toISOString()}`,
+        );
       }
-      
+
       const result = await this.qstash.publishJSON({
         url: webhookUrl,
         body: payload,
         delay: finalDelaySeconds,
         headers: {
-          'Content-Type': 'application/json',
-          'X-Tweet-Schedule': 'true',
+          "Content-Type": "application/json",
+          "X-Tweet-Schedule": "true",
         },
       });
 
       console.log(`QStash result:`, result);
       return { messageId: result.messageId };
     } catch (error) {
-      console.error('Error scheduling tweet:', error);
-      throw new Error(`Failed to schedule tweet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error scheduling tweet:", error);
+      throw new Error(
+        `Failed to schedule tweet: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -116,13 +125,13 @@ export class TweetScheduler {
       userId: string;
       twitterAccountId: string;
       interval?: number; // Minutes between thread tweets
-    }
+    },
   ): Promise<{ messageIds: string[] }> {
     try {
-      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/thread`;
-      
+      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/webhooks/qstash/thread`;
+
       const payload = {
-        type: 'thread',
+        type: "thread",
         threadId,
         ...threadData,
       };
@@ -131,27 +140,33 @@ export class TweetScheduler {
       const now = new Date();
       const delayMs = scheduledFor.getTime() - now.getTime();
       const delaySeconds = Math.max(0, Math.floor(delayMs / 1000));
-      
+
       if (delayMs < 0) {
-        throw new Error(`Cannot schedule in the past. Scheduled: ${scheduledFor.toISOString()}, Now: ${now.toISOString()}`);
+        throw new Error(
+          `Cannot schedule in the past. Scheduled: ${scheduledFor.toISOString()}, Now: ${now.toISOString()}`,
+        );
       }
-      
-      console.log(`QStash thread scheduling: delay=${delaySeconds}s (${delayMs}ms), scheduledFor=${scheduledFor.toISOString()}, now=${now.toISOString()}`);
+
+      console.log(
+        `QStash thread scheduling: delay=${delaySeconds}s (${delayMs}ms), scheduledFor=${scheduledFor.toISOString()}, now=${now.toISOString()}`,
+      );
 
       const result = await this.qstash.publishJSON({
         url: webhookUrl,
         body: payload,
         delay: delaySeconds,
         headers: {
-          'Content-Type': 'application/json',
-          'X-Thread-Schedule': 'true',
+          "Content-Type": "application/json",
+          "X-Thread-Schedule": "true",
         },
       });
 
       return { messageIds: [result.messageId] };
     } catch (error) {
-      console.error('Error scheduling thread:', error);
-      throw new Error(`Failed to schedule thread: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error scheduling thread:", error);
+      throw new Error(
+        `Failed to schedule thread: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -162,8 +177,10 @@ export class TweetScheduler {
     try {
       await this.qstash.messages.delete(messageId);
     } catch (error) {
-      console.error('Error canceling scheduled tweet:', error);
-      throw new Error(`Failed to cancel scheduled tweet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error canceling scheduled tweet:", error);
+      throw new Error(
+        `Failed to cancel scheduled tweet: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -173,21 +190,23 @@ export class TweetScheduler {
   async rescheduleTweet(
     messageId: string,
     newScheduledFor: Date,
-    tweetData: any
+    tweetData: any,
   ): Promise<{ messageId: string }> {
     try {
       // Cancel the existing scheduled tweet
       await this.cancelScheduledTweet(messageId);
-      
+
       // Schedule with new time
       return await this.scheduleTweet(
         tweetData.tweetId,
         newScheduledFor,
-        tweetData
+        tweetData,
       );
     } catch (error) {
-      console.error('Error rescheduling tweet:', error);
-      throw new Error(`Failed to reschedule tweet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error rescheduling tweet:", error);
+      throw new Error(
+        `Failed to reschedule tweet: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -202,13 +221,13 @@ export class TweetScheduler {
       userId: string;
       twitterAccountId: string;
       templateVariables?: Record<string, string>;
-    }
+    },
   ): Promise<{ scheduleId: string }> {
     try {
-      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/recurring`;
-      
+      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/webhooks/qstash/recurring`;
+
       const payload = {
-        type: 'recurring',
+        type: "recurring",
         recurringId,
         ...tweetData,
       };
@@ -218,15 +237,17 @@ export class TweetScheduler {
         cron: cronExpression,
         body: JSON.stringify(payload),
         headers: {
-          'Content-Type': 'application/json',
-          'X-Recurring-Tweet': 'true',
+          "Content-Type": "application/json",
+          "X-Recurring-Tweet": "true",
         },
       });
 
       return { scheduleId: result.scheduleId };
     } catch (error) {
-      console.error('Error scheduling recurring tweet:', error);
-      throw new Error(`Failed to schedule recurring tweet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error scheduling recurring tweet:", error);
+      throw new Error(
+        `Failed to schedule recurring tweet: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -237,8 +258,10 @@ export class TweetScheduler {
     try {
       await this.qstash.schedules.delete(scheduleId);
     } catch (error) {
-      console.error('Error canceling recurring tweet:', error);
-      throw new Error(`Failed to cancel recurring tweet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error canceling recurring tweet:", error);
+      throw new Error(
+        `Failed to cancel recurring tweet: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -249,11 +272,15 @@ export class TweetScheduler {
     try {
       // QStash doesn't provide a direct way to list messages
       // This would need to be implemented using a database query instead
-      console.warn('getScheduledTweets: QStash does not provide message listing, using database query instead');
+      console.warn(
+        "getScheduledTweets: QStash does not provide message listing, using database query instead",
+      );
       return [];
     } catch (error) {
-      console.error('Error getting scheduled tweets:', error);
-      throw new Error(`Failed to get scheduled tweets: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error getting scheduled tweets:", error);
+      throw new Error(
+        `Failed to get scheduled tweets: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -262,53 +289,73 @@ export class TweetScheduler {
    */
   async scheduleOptimalTimeAnalysis(
     userId: string,
-    analysisType: 'daily' | 'weekly' | 'monthly' = 'weekly'
+    analysisType: "daily" | "weekly" | "monthly" = "weekly",
   ): Promise<{ scheduleId: string }> {
     try {
-      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/analysis`;
-      
+      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/webhooks/qstash/analysis`;
+
       const cronExpressions = {
-        daily: '0 0 * * *',    // Daily at midnight
-        weekly: '0 0 * * 1',   // Weekly on Monday at midnight
-        monthly: '0 0 1 * *',  // Monthly on 1st at midnight
+        daily: "0 0 * * *", // Daily at midnight
+        weekly: "0 0 * * 1", // Weekly on Monday at midnight
+        monthly: "0 0 1 * *", // Monthly on 1st at midnight
       };
 
       const result = await this.qstash.schedules.create({
         destination: webhookUrl,
         cron: cronExpressions[analysisType],
         body: JSON.stringify({
-          type: 'optimal_time_analysis',
+          type: "optimal_time_analysis",
           userId,
           analysisType,
         }),
         headers: {
-          'Content-Type': 'application/json',
-          'X-Analysis-Schedule': 'true',
+          "Content-Type": "application/json",
+          "X-Analysis-Schedule": "true",
         },
       });
 
       return { scheduleId: result.scheduleId };
     } catch (error) {
-      console.error('Error scheduling optimal time analysis:', error);
-      throw new Error(`Failed to schedule optimal time analysis: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error scheduling optimal time analysis:", error);
+      throw new Error(
+        `Failed to schedule optimal time analysis: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
   /**
    * Batch schedule multiple tweets
    */
-  async batchScheduleTweets(tweets: Array<{
-    tweetId: string;
-    scheduledFor: Date;
-    content: string;
-    userId: string;
-    twitterAccountId: string;
-  }>): Promise<{ results: Array<{ tweetId: string; messageId: string; success: boolean; error?: string }> }> {
-    const results: Array<{ tweetId: string; messageId: string; success: boolean; error?: string }> = [];
+  async batchScheduleTweets(
+    tweets: Array<{
+      tweetId: string;
+      scheduledFor: Date;
+      content: string;
+      userId: string;
+      twitterAccountId: string;
+    }>,
+  ): Promise<{
+    results: Array<{
+      tweetId: string;
+      messageId: string;
+      success: boolean;
+      error?: string;
+    }>;
+  }> {
+    const results: Array<{
+      tweetId: string;
+      messageId: string;
+      success: boolean;
+      error?: string;
+    }> = [];
 
     for (const tweet of tweets) {
       try {
-        const result = await this.scheduleTweet(tweet.tweetId, tweet.scheduledFor, tweet);
+        const result = await this.scheduleTweet(
+          tweet.tweetId,
+          tweet.scheduledFor,
+          tweet,
+        );
         results.push({
           tweetId: tweet.tweetId,
           messageId: result.messageId,
@@ -317,9 +364,9 @@ export class TweetScheduler {
       } catch (error) {
         results.push({
           tweetId: tweet.tweetId,
-          messageId: '',
+          messageId: "",
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
@@ -330,22 +377,25 @@ export class TweetScheduler {
   /**
    * Health check for QStash service
    */
-  async healthCheck(): Promise<{ status: 'healthy' | 'unhealthy'; latency?: number }> {
+  async healthCheck(): Promise<{
+    status: "healthy" | "unhealthy";
+    latency?: number;
+  }> {
     try {
       const start = Date.now();
-      
+
       // Try a simple publish operation as a health check
       await this.qstash.publishJSON({
-        url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/qstash/health`,
-        body: { type: 'health_check', timestamp: Date.now() },
+        url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/webhooks/qstash/health`,
+        body: { type: "health_check", timestamp: Date.now() },
         delay: 60000, // 1 minute delay for health check
       });
-      
+
       const latency = Date.now() - start;
-      return { status: 'healthy', latency };
+      return { status: "healthy", latency };
     } catch (error) {
-      console.error('QStash health check failed:', error);
-      return { status: 'unhealthy' };
+      console.error("QStash health check failed:", error);
+      return { status: "unhealthy" };
     }
   }
 }
@@ -362,14 +412,15 @@ export class QStashWebhookVerifier {
     signature: string,
     url: string,
     currentSigningKey?: string,
-    nextSigningKey?: string
+    nextSigningKey?: string,
   ): Promise<boolean> {
     try {
-      const currentKey = currentSigningKey || process.env.QSTASH_CURRENT_SIGNING_KEY;
+      const currentKey =
+        currentSigningKey || process.env.QSTASH_CURRENT_SIGNING_KEY;
       const nextKey = nextSigningKey || process.env.QSTASH_NEXT_SIGNING_KEY;
-      
+
       if (!currentKey) {
-        console.error('Missing QStash current signing key');
+        console.error("Missing QStash current signing key");
         return false;
       }
 
@@ -386,10 +437,10 @@ export class QStashWebhookVerifier {
 
       return isValid;
     } catch (error) {
-      console.error('Error verifying QStash signature:', error);
-      console.error('Body:', body.substring(0, 100) + '...');
-      console.error('Signature:', signature);
-      console.error('URL:', url);
+      console.error("Error verifying QStash signature:", error);
+      console.error("Body:", body.substring(0, 100) + "...");
+      console.error("Signature:", signature);
+      console.error("URL:", url);
       return false;
     }
   }
@@ -401,7 +452,7 @@ export class QStashWebhookVerifier {
     try {
       return JSON.parse(body);
     } catch (_error) {
-      throw new Error('Invalid JSON payload in webhook');
+      throw new Error("Invalid JSON payload in webhook");
     }
   }
 }

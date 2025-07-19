@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       quoteTweetId,
       isThread,
       threadTweets,
+      threadData, // New format: [{ content: string, mediaIds: string[] }]
       communityId,
       hasMedia = false,
       saveDraft = true, // Whether to save to database
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!content && !threadTweets?.length) {
+    if (!content && !threadTweets?.length && !threadData?.length) {
       return NextResponse.json(
         { error: "Tweet content is required" },
         { status: 400 },
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
         mediaIds,
         isThread,
         threadTweets,
+        threadData,
         userId,
         replyToTweetId,
         quoteTweetId,
@@ -93,14 +95,30 @@ export async function POST(request: NextRequest) {
         .insert(TweetSchema)
         .values({
           nanoId: nanoid(8),
-          content: isThread ? threadTweets.join("\n\n") : content,
+          content: isThread
+            ? threadData && threadData.length > 0
+              ? threadData.map((tweet: any) => tweet.content).join("\n\n")
+              : threadTweets?.join("\n\n") || ""
+            : content,
           tweetType: isThread ? "thread" : "single",
           status: status,
           postedAt: status === "posted" ? new Date() : null,
           twitterTweetId,
           mediaUrls: mediaIds || [],
-          hashtags: extractHashtags(content),
-          mentions: extractMentions(content),
+          hashtags: extractHashtags(
+            isThread
+              ? threadData && threadData.length > 0
+                ? threadData.map((tweet: any) => tweet.content).join("\n\n")
+                : threadTweets?.join("\n\n") || ""
+              : content,
+          ),
+          mentions: extractMentions(
+            isThread
+              ? threadData && threadData.length > 0
+                ? threadData.map((tweet: any) => tweet.content).join("\n\n")
+                : threadTweets?.join("\n\n") || ""
+              : content,
+          ),
           communityId: communityId || null,
           twitterAccountId,
           userId,

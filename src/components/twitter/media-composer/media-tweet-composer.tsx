@@ -63,6 +63,11 @@ interface MediaFile {
   error?: string;
 }
 
+interface ThreadTweetData {
+  content: string;
+  mediaFiles: MediaFile[];
+}
+
 interface MediaTweetComposerProps {
   userId?: string;
 }
@@ -76,7 +81,9 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduleDateTime, setScheduleDateTime] = useState<string>("");
   const [isThread, setIsThread] = useState(false);
-  const [threadTweets, setThreadTweets] = useState<string[]>([""]);
+  const [threadTweets, setThreadTweets] = useState<ThreadTweetData[]>([
+    { content: "", mediaFiles: [] },
+  ]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [posting, setPosting] = useState(false);
   const [scheduling, setScheduling] = useState(false);
@@ -318,27 +325,249 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
 
   // Adds a new tweet to the thread
   const addThreadTweet = () => {
-    setThreadTweets([...threadTweets, ""]);
+    setThreadTweets([...threadTweets, { content: "", mediaFiles: [] }]);
   };
 
   // Removes a tweet from the thread
-  const removeThreadTweet = (index: number) => {
+  const removeThreadTweet = async (index: number) => {
     if (threadTweets.length > 1) {
+      // Clean up media files for the tweet being removed
+      const tweetToRemove = threadTweets[index];
+      if (tweetToRemove.mediaFiles.length > 0) {
+        await cleanupTweetMediaFiles(tweetToRemove.mediaFiles);
+      }
       const newTweets = threadTweets.filter((_, i) => i !== index);
       setThreadTweets(newTweets);
     }
   };
 
-  // Updates a specific tweet in the thread
+  // Updates a specific tweet content in the thread
   const updateThreadTweet = (index: number, value: string) => {
     const newTweets = [...threadTweets];
-    newTweets[index] = value;
+    newTweets[index] = { ...newTweets[index], content: value };
     setThreadTweets(newTweets);
   };
 
-  // Cleans up media files after posting or scheduling
-  const cleanupMediaFiles = async () => {
-    const keysToDelete = mediaFiles
+  // Updates media files for a specific tweet in the thread
+  const updateThreadTweetMedia = (
+    tweetIndex: number,
+    mediaFiles: MediaFile[],
+  ) => {
+    const newTweets = [...threadTweets];
+    newTweets[tweetIndex] = { ...newTweets[tweetIndex], mediaFiles };
+    setThreadTweets(newTweets);
+  };
+
+  // Handles media upload for a specific tweet in the thread
+  const handleTweetMediaUpload = async (tweetIndex: number, files: File[]) => {
+    const tweet = threadTweets[tweetIndex];
+    const MAX_FILES = 4;
+    const currentFileCount = tweet.mediaFiles.length;
+
+    if (currentFileCount + files.length > MAX_FILES) {
+      toast.error(
+        `Maximum ${MAX_FILES} files allowed per tweet. You can add ${MAX_FILES - currentFileCount} more.`,
+      );
+      return;
+    }
+
+    const newMediaFiles: MediaFile[] = files.map((file) => {
+      const isVideo = file.type.startsWith("video/");
+      return {
+        file,
+        url: URL.createObjectURL(file),
+        type: isVideo ? "video" : "image",
+        size: file.size,
+        uploading: false,
+        uploaded: false,
+        uploadProgress: 0,
+      };
+    });
+
+    // Add new files to the specific tweet
+    const updatedMediaFiles = [...tweet.mediaFiles, ...newMediaFiles];
+    updateThreadTweetMedia(tweetIndex, updatedMediaFiles);
+
+    // Start uploading files
+    for (let i = 0; i < newMediaFiles.length; i++) {
+      const mediaFile = newMediaFiles[i];
+      await uploadTweetMediaFile(tweetIndex, currentFileCount + i, mediaFile);
+    }
+  };
+
+  // Uploads a media file for a specific tweet
+  const uploadTweetMediaFile = async (
+    tweetIndex: number,
+    mediaIndex: number,
+    mediaFile: MediaFile,
+  ) => {
+    try {
+      // Update file status to uploading using functional update
+      setThreadTweets((prevTweets) =>
+        prevTweets.map((tweet, i) =>
+          i === tweetIndex
+            ? {
+                ...tweet,
+                mediaFiles: tweet.mediaFiles.map((file, j) =>
+                  j === mediaIndex
+                    ? { ...file, uploading: true, uploadProgress: 0 }
+                    : file,
+                ),
+              }
+            : tweet,
+        ),
+      );
+
+      const formData = new FormData();
+      formData.append("file", mediaFile.file);
+      formData.append("mediaType", mediaFile.type);
+
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setThreadTweets((prevTweets) =>
+          prevTweets.map((tweet, i) =>
+            i === tweetIndex
+              ? {
+                  ...tweet,
+                  mediaFiles: tweet.mediaFiles.map((file, j) =>
+                    j === mediaIndex &&
+                    file.uploadProgress !== undefined &&
+                    file.uploadProgress < 90
+                      ? { ...file, uploadProgress: file.uploadProgress + 10 }
+                      : file,
+                  ),
+                }
+              : tweet,
+          ),
+        );
+      }, 200);
+
+      const response = await fetch("/api/media/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      const data = await response.json();
+
+      if (data.success) {
+        setThreadTweets((prevTweets) =>
+          prevTweets.map((tweet, i) =>
+            i === tweetIndex
+              ? {
+                  ...tweet,
+                  mediaFiles: tweet.mediaFiles.map((file, j) =>
+                    j === mediaIndex
+                      ? {
+                          ...file,
+                          uploading: false,
+                          uploaded: true,
+                          uploadProgress: 100,
+                          r2Key: data.file.key,
+                          r2Url: data.file.url,
+                        }
+                      : file,
+                  ),
+                }
+              : tweet,
+          ),
+        );
+        toast.success(
+          `${mediaFile.type === "video" ? "Video" : "Image"} uploaded successfully!`,
+        );
+      } else {
+        setThreadTweets((prevTweets) =>
+          prevTweets.map((tweet, i) =>
+            i === tweetIndex
+              ? {
+                  ...tweet,
+                  mediaFiles: tweet.mediaFiles.map((file, j) =>
+                    j === mediaIndex
+                      ? {
+                          ...file,
+                          uploading: false,
+                          uploaded: false,
+                          uploadProgress: 0,
+                          error: data.error,
+                        }
+                      : file,
+                  ),
+                }
+              : tweet,
+          ),
+        );
+        toast.error(data.error || "Failed to upload file");
+      }
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      setThreadTweets((prevTweets) =>
+        prevTweets.map((tweet, i) =>
+          i === tweetIndex
+            ? {
+                ...tweet,
+                mediaFiles: tweet.mediaFiles.map((file, j) =>
+                  j === mediaIndex
+                    ? {
+                        ...file,
+                        uploading: false,
+                        uploaded: false,
+                        uploadProgress: 0,
+                        error: "Upload failed",
+                      }
+                    : file,
+                ),
+              }
+            : tweet,
+        ),
+      );
+      toast.error("Failed to upload file");
+    }
+  };
+
+  // Removes a media file from a specific tweet
+  const removeTweetMediaFile = async (
+    tweetIndex: number,
+    mediaIndex: number,
+  ) => {
+    const tweet = threadTweets[tweetIndex];
+    const fileToRemove = tweet.mediaFiles[mediaIndex];
+
+    // Delete from R2 if uploaded
+    if (fileToRemove.uploaded && fileToRemove.r2Key) {
+      try {
+        await fetch("/api/media/delete", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            keys: [fileToRemove.r2Key],
+          }),
+        });
+      } catch (error) {
+        console.error("Error deleting file from R2:", error);
+      }
+    }
+
+    // Revoke object URL to free memory
+    URL.revokeObjectURL(fileToRemove.url);
+
+    // Remove from state using functional update
+    setThreadTweets((prevTweets) =>
+      prevTweets.map((tweet, i) =>
+        i === tweetIndex
+          ? {
+              ...tweet,
+              mediaFiles: tweet.mediaFiles.filter((_, j) => j !== mediaIndex),
+            }
+          : tweet,
+      ),
+    );
+  };
+
+  // Cleans up media files for a specific set of files
+  const cleanupTweetMediaFiles = async (files: MediaFile[]) => {
+    const keysToDelete = files
       .filter((file) => file.uploaded && file.r2Key)
       .map((file) => file.r2Key!);
 
@@ -357,20 +586,31 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     }
 
     // Revoke all object URLs
-    mediaFiles.forEach((file) => URL.revokeObjectURL(file.url));
+    files.forEach((file) => URL.revokeObjectURL(file.url));
+  };
+
+  // Cleans up media files after posting or scheduling
+  const cleanupMediaFiles = async () => {
+    await cleanupTweetMediaFiles(mediaFiles);
     setMediaFiles([]);
   };
 
   // Handles posting a tweet immediately
   const handlePostNow = async () => {
     const contentToPost = isThread
-      ? threadTweets.filter((t) => t.trim())
+      ? threadTweets.filter((t) => t.content.trim())
       : [content];
 
-    if (
-      contentToPost.length === 0 ||
-      (!contentToPost[0].trim() && mediaFiles.length === 0)
-    ) {
+    const hasContent = isThread
+      ? contentToPost.length > 0 &&
+        (contentToPost[0] as ThreadTweetData).content.trim()
+      : contentToPost.length > 0 && (contentToPost[0] as string).trim();
+
+    const hasMediaFiles = isThread
+      ? threadTweets.some((t) => t.mediaFiles.length > 0)
+      : mediaFiles.length > 0;
+
+    if (!hasContent && !hasMediaFiles) {
       toast.error("Tweet content or media is required");
       return;
     }
@@ -380,8 +620,16 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
       return;
     }
 
-    // Check if all media files are uploaded successfully (allow posting with uploaded files)
-    const hasFailedFiles = mediaFiles.some((file) => file.error);
+    // Check if all media files are uploaded successfully
+    let hasFailedFiles = false;
+    if (isThread) {
+      hasFailedFiles = threadTweets.some((tweet) =>
+        tweet.mediaFiles.some((file) => file.error),
+      );
+    } else {
+      hasFailedFiles = mediaFiles.some((file) => file.error);
+    }
+
     if (hasFailedFiles) {
       toast.error("Please remove failed uploads before posting");
       return;
@@ -389,7 +637,17 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
 
     setPosting(true);
     try {
-      const mediaIds = mediaFiles.map((file) => file.r2Key).filter(Boolean);
+      let threadData: { content: string; mediaIds: string[] }[] | undefined;
+      if (isThread) {
+        threadData = threadTweets
+          .filter((t) => t.content.trim())
+          .map((tweet) => ({
+            content: tweet.content,
+            mediaIds: tweet.mediaFiles
+              .map((file) => file.r2Key)
+              .filter((key): key is string => Boolean(key)),
+          }));
+      }
 
       const response = await fetch("/api/twitter/post", {
         method: "POST",
@@ -399,16 +657,19 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         body: JSON.stringify({
           content: isThread ? null : content,
           isThread,
-          threadTweets: isThread
-            ? threadTweets.filter((t) => t.trim())
-            : undefined,
+          threadTweets: isThread ? undefined : undefined,
+          threadData: isThread ? threadData : undefined,
           twitterAccountId: selectedAccount,
           communityId:
             selectedCommunity === "none"
               ? undefined
               : selectedCommunity || undefined,
-          mediaIds,
-          hasMedia: mediaFiles.length > 0,
+          mediaIds: !isThread
+            ? mediaFiles.map((file) => file.r2Key).filter(Boolean)
+            : undefined,
+          hasMedia: isThread
+            ? threadTweets.some((t) => t.mediaFiles.length > 0)
+            : mediaFiles.length > 0,
         }),
       });
 
@@ -417,11 +678,17 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
       if (data.success) {
         toast.success("Tweet posted successfully!");
         setContent("");
-        setThreadTweets([""]);
+        setThreadTweets([{ content: "", mediaFiles: [] }]);
         setIsThread(false);
         setSelectedCommunity("none");
         // Clean up media files after successful post
-        await cleanupMediaFiles();
+        if (isThread) {
+          for (const tweet of threadTweets) {
+            await cleanupTweetMediaFiles(tweet.mediaFiles);
+          }
+        } else {
+          await cleanupMediaFiles();
+        }
       } else {
         toast.error(data.error || "Failed to post tweet");
       }
@@ -436,13 +703,19 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   // Handles scheduling a tweet for later
   const handleScheduleTweet = async () => {
     const contentToPost = isThread
-      ? threadTweets.filter((t) => t.trim())
+      ? threadTweets.filter((t) => t.content.trim())
       : [content];
 
-    if (
-      contentToPost.length === 0 ||
-      (!contentToPost[0].trim() && mediaFiles.length === 0)
-    ) {
+    const hasContent = isThread
+      ? contentToPost.length > 0 &&
+        (contentToPost[0] as ThreadTweetData).content.trim()
+      : contentToPost.length > 0 && (contentToPost[0] as string).trim();
+
+    const hasMediaFiles = isThread
+      ? threadTweets.some((t) => t.mediaFiles.length > 0)
+      : mediaFiles.length > 0;
+
+    if (!hasContent && !hasMediaFiles) {
       toast.error("Tweet content or media is required");
       return;
     }
@@ -464,7 +737,11 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     }
 
     // Check media expiry warning for schedules > 24 hours
-    if (mediaFiles.length > 0) {
+    const hasMedia = isThread
+      ? threadTweets.some((t) => t.mediaFiles.length > 0)
+      : mediaFiles.length > 0;
+
+    if (hasMedia) {
       const scheduleDate = new Date(scheduleDateTime);
       const now = new Date();
       const hoursUntilSchedule =
@@ -479,7 +756,15 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     }
 
     // Check if all media files are uploaded successfully
-    const hasFailedFiles = mediaFiles.some((file) => file.error);
+    let hasFailedFiles = false;
+    if (isThread) {
+      hasFailedFiles = threadTweets.some((tweet) =>
+        tweet.mediaFiles.some((file) => file.error),
+      );
+    } else {
+      hasFailedFiles = mediaFiles.some((file) => file.error);
+    }
+
     if (hasFailedFiles) {
       toast.error("Please remove failed uploads before scheduling");
       return;
@@ -487,10 +772,18 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
 
     setScheduling(true);
     try {
-      const mediaIds = mediaFiles
-        .filter((file) => file.uploaded)
-        .map((file) => file.r2Key)
-        .filter(Boolean);
+      let threadData: { content: string; mediaIds: string[] }[] | undefined;
+      if (isThread) {
+        threadData = threadTweets
+          .filter((t) => t.content.trim())
+          .map((tweet) => ({
+            content: tweet.content,
+            mediaIds: tweet.mediaFiles
+              .filter((file) => file.uploaded)
+              .map((file) => file.r2Key)
+              .filter((key): key is string => Boolean(key)),
+          }));
+      }
 
       const response = await fetch("/api/twitter/schedule", {
         method: "POST",
@@ -500,16 +793,22 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         body: JSON.stringify({
           content: isThread ? null : content,
           isThread,
-          threadTweets: isThread
-            ? threadTweets.filter((t) => t.trim())
-            : undefined,
+          threadTweets: isThread ? undefined : undefined,
+          threadData: isThread ? threadData : undefined,
           twitterAccountId: selectedAccount,
           communityId:
             selectedCommunity === "none"
               ? undefined
               : selectedCommunity || undefined,
-          mediaIds,
-          hasMedia: mediaFiles.length > 0,
+          mediaIds: !isThread
+            ? mediaFiles
+                .filter((file) => file.uploaded)
+                .map((file) => file.r2Key)
+                .filter(Boolean)
+            : undefined,
+          hasMedia: isThread
+            ? threadTweets.some((t) => t.mediaFiles.length > 0)
+            : mediaFiles.length > 0,
           scheduledFor: scheduleDateTime,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
@@ -523,13 +822,19 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
           `Tweet scheduled for ${localDateTime.toLocaleDateString()} at ${localDateTime.toLocaleTimeString()}`,
         );
         setContent("");
-        setThreadTweets([""]);
+        setThreadTweets([{ content: "", mediaFiles: [] }]);
         setIsThread(false);
         setSelectedCommunity("none");
         setScheduleDateTime("");
         setIsScheduled(false);
         // Clean up media files after successful schedule
-        await cleanupMediaFiles();
+        if (isThread) {
+          for (const tweet of threadTweets) {
+            await cleanupTweetMediaFiles(tweet.mediaFiles);
+          }
+        } else {
+          await cleanupMediaFiles();
+        }
       } else {
         toast.error(data.error || "Failed to schedule tweet");
       }
@@ -541,7 +846,9 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     }
   };
 
-  const currentContent = isThread ? threadTweets.join("\n\n") : content;
+  const currentContent = isThread
+    ? threadTweets.map((t) => t.content).join("\n\n")
+    : content;
   const characterCount = getCharacterCount(currentContent);
   const hashtags = extractHashtags(currentContent);
   const mentions = extractMentions(currentContent);
@@ -620,120 +927,122 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                   </div>
                 )}
 
-                {/* Media Upload Area */}
-                <div className="space-y-4">
-                  <label className="text-sm font-medium">
-                    Media (Images & Videos)
-                  </label>
+                {/* Media Upload Area - Only for single tweets */}
+                {!isThread && (
+                  <div className="space-y-4">
+                    <label className="text-sm font-medium">
+                      Media (Images & Videos)
+                    </label>
 
-                  {/* Dropzone */}
-                  {mediaFiles.length < 4 && (
-                    <div
-                      {...getRootProps()}
-                      className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                        isDragActive
-                          ? "border-primary bg-primary/5"
-                          : "border-muted-foreground/25 hover:border-primary/50"
-                      }`}
-                    >
-                      <input {...getInputProps()} />
-                      <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        {isDragActive
-                          ? "Drop files here..."
-                          : "Drag & drop media files here, or click to select"}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Images: up to 5MB | Videos: up to 512MB | Max 4 files
-                      </p>
-                    </div>
-                  )}
+                    {/* Dropzone */}
+                    {mediaFiles.length < 4 && (
+                      <div
+                        {...getRootProps()}
+                        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                          isDragActive
+                            ? "border-primary bg-primary/5"
+                            : "border-muted-foreground/25 hover:border-primary/50"
+                        }`}
+                      >
+                        <input {...getInputProps()} />
+                        <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          {isDragActive
+                            ? "Drop files here..."
+                            : "Drag & drop media files here, or click to select"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Images: up to 5MB | Videos: up to 512MB | Max 4 files
+                        </p>
+                      </div>
+                    )}
 
-                  {/* Media Files Display */}
-                  {mediaFiles.length > 0 && (
-                    <div className="grid gap-4 grid-cols-2">
-                      {mediaFiles.map((mediaFile, index) => (
-                        <div
-                          key={index}
-                          className="relative border rounded-lg overflow-hidden"
-                        >
-                          {/* Media Preview */}
-                          <div className="aspect-square bg-muted relative">
-                            {mediaFile.type === "video" ? (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Video className="h-8 w-8 text-muted-foreground" />
-                                <video
-                                  src={mediaFile.url}
-                                  className="absolute inset-0 w-full h-full object-cover"
-                                  muted
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <Play className="h-12 w-12 text-white drop-shadow-lg" />
+                    {/* Media Files Display */}
+                    {mediaFiles.length > 0 && (
+                      <div className="grid gap-4 grid-cols-2">
+                        {mediaFiles.map((mediaFile, index) => (
+                          <div
+                            key={index}
+                            className="relative border rounded-lg overflow-hidden"
+                          >
+                            {/* Media Preview */}
+                            <div className="aspect-square bg-muted relative">
+                              {mediaFile.type === "video" ? (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Video className="h-8 w-8 text-muted-foreground" />
+                                  <video
+                                    src={mediaFile.url}
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                    muted
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <Play className="h-12 w-12 text-white drop-shadow-lg" />
+                                  </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <div className="relative w-full h-full">
-                                <Image
-                                  src={mediaFile.url}
-                                  alt="Upload preview"
-                                  fill
-                                  className="object-cover"
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Upload Status */}
-                          <div className="p-2 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-muted-foreground truncate">
-                                {mediaFile.file.name}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeMediaFile(index)}
-                                className="h-6 w-6 p-0"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
+                              ) : (
+                                <div className="relative w-full h-full">
+                                  <Image
+                                    src={mediaFile.url}
+                                    alt="Upload preview"
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                              )}
                             </div>
 
-                            {mediaFile.uploading && (
-                              <div className="space-y-1">
-                                <Progress
-                                  value={mediaFile.uploadProgress}
-                                  className="h-1"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                  Uploading... {mediaFile.uploadProgress}%
-                                </p>
-                              </div>
-                            )}
-
-                            {mediaFile.uploaded && (
-                              <div className="flex items-center gap-1">
-                                <div className="h-2 w-2 bg-green-500 rounded-full" />
-                                <span className="text-xs text-green-600">
-                                  Uploaded
+                            {/* Upload Status */}
+                            <div className="p-2 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {mediaFile.file.name}
                                 </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeMediaFile(index)}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
                               </div>
-                            )}
 
-                            {mediaFile.error && (
-                              <div className="flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3 text-destructive" />
-                                <span className="text-xs text-destructive">
-                                  {mediaFile.error}
-                                </span>
-                              </div>
-                            )}
+                              {mediaFile.uploading && (
+                                <div className="space-y-1">
+                                  <Progress
+                                    value={mediaFile.uploadProgress}
+                                    className="h-1"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Uploading... {mediaFile.uploadProgress}%
+                                  </p>
+                                </div>
+                              )}
+
+                              {mediaFile.uploaded && (
+                                <div className="flex items-center gap-1">
+                                  <div className="h-2 w-2 bg-green-500 rounded-full" />
+                                  <span className="text-xs text-green-600">
+                                    Uploaded
+                                  </span>
+                                </div>
+                              )}
+
+                              {mediaFile.error && (
+                                <div className="flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3 text-destructive" />
+                                  <span className="text-xs text-destructive">
+                                    {mediaFile.error}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Thread Toggle */}
                 <div className="flex items-center justify-between">
@@ -742,9 +1051,15 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     <Button
                       variant={!isThread ? "default" : "outline"}
                       size="sm"
-                      onClick={() => {
+                      onClick={async () => {
                         setIsThread(false);
-                        setThreadTweets([""]);
+                        // Clear thread media when switching to single tweet mode
+                        for (const tweet of threadTweets) {
+                          if (tweet.mediaFiles.length > 0) {
+                            await cleanupTweetMediaFiles(tweet.mediaFiles);
+                          }
+                        }
+                        setThreadTweets([{ content: "", mediaFiles: [] }]);
                       }}
                     >
                       Single Tweet
@@ -752,7 +1067,13 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     <Button
                       variant={isThread ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setIsThread(true)}
+                      onClick={() => {
+                        setIsThread(true);
+                        // Clear single tweet media when switching to thread mode
+                        if (mediaFiles.length > 0) {
+                          cleanupMediaFiles();
+                        }
+                      }}
                     >
                       Thread
                     </Button>
@@ -794,35 +1115,198 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                         Add Tweet
                       </Button>
                     </div>
-                    {threadTweets.map((tweet, index) => (
-                      <div key={index} className="space-y-2">
+                    {threadTweets.map((tweet, tweetIndex) => (
+                      <div
+                        key={tweetIndex}
+                        className="space-y-4 p-4 border rounded-lg bg-muted/30"
+                      >
                         <div className="flex items-center justify-between">
-                          <label className="text-sm">Tweet {index + 1}</label>
+                          <label className="text-sm font-medium">
+                            Tweet {tweetIndex + 1}
+                          </label>
                           <div className="flex items-center gap-2">
                             <span
-                              className={`text-sm ${getCharacterColor(getCharacterCount(tweet))}`}
+                              className={`text-sm ${getCharacterColor(getCharacterCount(tweet.content))}`}
                             >
-                              {getCharacterCount(tweet)} chars
+                              {getCharacterCount(tweet.content)} chars
                             </span>
                             {threadTweets.length > 1 && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => removeThreadTweet(index)}
+                                onClick={() => removeThreadTweet(tweetIndex)}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
                         </div>
-                        <Textarea
-                          placeholder={`Tweet ${index + 1}...`}
-                          value={tweet}
-                          onChange={(e) =>
-                            updateThreadTweet(index, e.target.value)
-                          }
-                          className="min-h-[100px] resize-none"
-                        />
+
+                        <div
+                          className="relative"
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const target = e.currentTarget.querySelector(
+                              ".drag-overlay",
+                            ) as HTMLElement;
+                            if (target) target.style.opacity = "1";
+                          }}
+                          onDragEnter={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Only hide if we're leaving the container, not child elements
+                            if (
+                              !e.currentTarget.contains(e.relatedTarget as Node)
+                            ) {
+                              const target = e.currentTarget.querySelector(
+                                ".drag-overlay",
+                              ) as HTMLElement;
+                              if (target) target.style.opacity = "0";
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            const target = e.currentTarget.querySelector(
+                              ".drag-overlay",
+                            ) as HTMLElement;
+                            if (target) target.style.opacity = "0";
+
+                            const files = Array.from(e.dataTransfer.files);
+                            const imageAndVideoFiles = files.filter(
+                              (file) =>
+                                file.type.startsWith("image/") ||
+                                file.type.startsWith("video/"),
+                            );
+
+                            if (imageAndVideoFiles.length > 0) {
+                              handleTweetMediaUpload(
+                                tweetIndex,
+                                imageAndVideoFiles,
+                              );
+                            }
+                          }}
+                        >
+                          <Textarea
+                            placeholder={`Tweet ${tweetIndex + 1} content...`}
+                            value={tweet.content}
+                            onChange={(e) =>
+                              updateThreadTweet(tweetIndex, e.target.value)
+                            }
+                            className="min-h-[100px] resize-none"
+                          />
+                          {/* Drag overlay */}
+                          <div className="drag-overlay absolute inset-0 pointer-events-none opacity-0 transition-opacity bg-primary/10 border-2 border-dashed border-primary rounded-md flex items-center justify-center text-sm text-primary font-medium">
+                            <div className="bg-background/90 px-3 py-2 rounded-md">
+                              <ImageIcon className="h-4 w-4 inline mr-2" />
+                              Drop images here
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Add Image Button - Compact */}
+                        {tweet.mediaFiles.length < 4 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const input = document.createElement("input");
+                              input.type = "file";
+                              input.accept = "image/*,video/*";
+                              input.multiple = true;
+                              input.onchange = (e) => {
+                                const files = Array.from(
+                                  (e.target as HTMLInputElement).files || [],
+                                );
+                                handleTweetMediaUpload(tweetIndex, files);
+                              };
+                              input.click();
+                            }}
+                            className="w-full justify-start text-muted-foreground hover:text-primary"
+                          >
+                            <ImageIcon className="h-4 w-4 mr-2" />
+                            Add Media{" "}
+                            {tweet.mediaFiles.length > 0 &&
+                              `(${tweet.mediaFiles.length}/4)`}
+                          </Button>
+                        )}
+
+                        {/* Images Display - Compact grid below content */}
+                        {tweet.mediaFiles.length > 0 && (
+                          <div className="grid gap-2 grid-cols-2 mt-2">
+                            {tweet.mediaFiles.map((mediaFile, mediaIndex) => (
+                              <div
+                                key={mediaIndex}
+                                className="relative border rounded-lg overflow-hidden group"
+                              >
+                                {/* Media Preview */}
+                                <div className="aspect-video bg-muted relative">
+                                  {mediaFile.type === "video" ? (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <video
+                                        src={mediaFile.url}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                        muted
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                        <Play className="h-6 w-6 text-white drop-shadow-lg" />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="relative w-full h-full">
+                                      <Image
+                                        src={mediaFile.url}
+                                        alt="Upload preview"
+                                        fill
+                                        className="object-cover"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* Remove button overlay */}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      removeTweetMediaFile(
+                                        tweetIndex,
+                                        mediaIndex,
+                                      )
+                                    }
+                                    className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+
+                                {/* Upload Status Bar */}
+                                {mediaFile.uploading && (
+                                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-1">
+                                    <Progress
+                                      value={mediaFile.uploadProgress}
+                                      className="h-1"
+                                    />
+                                  </div>
+                                )}
+
+                                {mediaFile.error && (
+                                  <div className="absolute bottom-0 left-0 right-0 bg-red-500/90 p-1 flex items-center gap-1 justify-center">
+                                    <AlertCircle className="h-3 w-3 text-white" />
+                                    <span className="text-xs text-white">
+                                      Failed
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -892,11 +1376,18 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     <Button
                       onClick={handleScheduleTweet}
                       disabled={
-                        (!currentContent.trim() && mediaFiles.length === 0) ||
+                        (!currentContent.trim() &&
+                          (isThread
+                            ? !threadTweets.some((t) => t.mediaFiles.length > 0)
+                            : mediaFiles.length === 0)) ||
                         !selectedAccount ||
                         !scheduleDateTime ||
                         scheduling ||
-                        mediaFiles.some((file) => file.error)
+                        (isThread
+                          ? threadTweets.some((t) =>
+                              t.mediaFiles.some((f) => f.error),
+                            )
+                          : mediaFiles.some((file) => file.error))
                       }
                       className="flex-1"
                     >
@@ -907,10 +1398,17 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     <Button
                       onClick={handlePostNow}
                       disabled={
-                        (!currentContent.trim() && mediaFiles.length === 0) ||
+                        (!currentContent.trim() &&
+                          (isThread
+                            ? !threadTweets.some((t) => t.mediaFiles.length > 0)
+                            : mediaFiles.length === 0)) ||
                         !selectedAccount ||
                         posting ||
-                        mediaFiles.some((file) => file.error)
+                        (isThread
+                          ? threadTweets.some((t) =>
+                              t.mediaFiles.some((f) => f.error),
+                            )
+                          : mediaFiles.some((file) => file.error))
                       }
                       className="flex-1"
                     >

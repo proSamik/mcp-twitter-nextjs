@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       mediaIds,
       isThread,
       threadTweets,
+      threadData,
     } = payload;
 
     console.log(`Processing scheduled tweet: ${tweetId} for user: ${userId}`);
@@ -106,15 +107,53 @@ export async function POST(request: NextRequest) {
       let twitterTweetId: string;
       let postedTweets: any[] = [];
 
-      if (isThread && threadTweets && threadTweets.length > 1) {
+      if (
+        isThread &&
+        ((threadTweets && threadTweets.length > 1) ||
+          (threadData && threadData.length > 1))
+      ) {
         // Post as thread
-        console.log(`Posting thread with ${threadTweets.length} tweets`);
-        const threadOptions: any = {};
-        if (twitterMediaIds.length > 0) {
-          threadOptions.mediaIds = [twitterMediaIds]; // First tweet gets media
+        let tweetsToPost: string[];
+        let mediaIdsPerTweet: string[][] | undefined;
+
+        if (threadData && threadData.length > 0) {
+          // New format with per-tweet media
+          console.log(
+            `Posting thread with ${threadData.length} tweets (with per-tweet media)`,
+          );
+          tweetsToPost = threadData.map((tweet) => tweet.content);
+
+          // Process media for each tweet
+          const allMediaIds: string[][] = [];
+          for (const tweet of threadData) {
+            if (tweet.mediaIds && tweet.mediaIds.length > 0) {
+              const processedMediaIds =
+                await mediaProcessor.processMediaForTwitter(
+                  tweet.mediaIds,
+                  twitterClient,
+                );
+              allMediaIds.push(processedMediaIds);
+            } else {
+              allMediaIds.push([]);
+            }
+          }
+          mediaIdsPerTweet = allMediaIds;
+        } else {
+          // Legacy format
+          console.log(
+            `Posting thread with ${threadTweets!.length} tweets (legacy format)`,
+          );
+          tweetsToPost = threadTweets!;
+          mediaIdsPerTweet =
+            twitterMediaIds.length > 0 ? [twitterMediaIds] : undefined;
         }
+
+        const threadOptions: any = {
+          mediaIds: mediaIdsPerTweet,
+        };
+
         const results = await twitterClient.postThread(
-          threadTweets,
+          tweetsToPost,
           threadOptions,
         );
         postedTweets = results;
