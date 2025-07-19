@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { useSignedMediaUrl } from "@/hooks/useSignedMediaUrl";
 import { Play, AlertCircle, Loader2 } from "lucide-react";
 
@@ -96,12 +97,14 @@ export function SecureMedia({
   }
 
   return (
-    <img
+    <Image
       src={url}
       alt={alt}
-      className={`absolute inset-0 w-full h-full object-cover ${className}`}
+      fill
+      className={`object-cover ${className}`}
       onLoad={() => onLoad?.()}
       onError={() => onError?.("Failed to load image")}
+      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
     />
   );
 }
