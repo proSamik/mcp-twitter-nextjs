@@ -24,8 +24,6 @@ export async function scheduleTweetInternal(params: {
       nanoId,
       scheduleDate,
       {
-        type: "tweet",
-        tweetId: nanoId,
         userId,
         twitterAccountId,
       },

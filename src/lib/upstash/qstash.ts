@@ -47,13 +47,8 @@ export class TweetScheduler {
     tweetId: string,
     scheduledFor: Date,
     tweetData: {
-      content: string;
       userId: string;
       twitterAccountId: string;
-      mediaIds?: string[];
-      isThread?: boolean;
-      threadTweets?: string[];
-      threadData?: { content: string; mediaIds: string[] }[];
     },
     delaySeconds?: number, // Optional pre-calculated delay
   ): Promise<{ messageId: string }> {

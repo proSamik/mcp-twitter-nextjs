@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Card } from "ui/card";
 import { Button } from "ui/button";
 import { Textarea } from "ui/textarea";
@@ -69,8 +69,127 @@ interface ThreadTweetData {
   mediaFiles: MediaFile[];
 }
 
+interface UploadQueueItem {
+  mediaFile: MediaFile;
+  index: number;
+  isThread: boolean;
+  tweetIndex?: number;
+  mediaIndex?: number;
+}
+
 interface MediaTweetComposerProps {
   userId?: string;
+}
+
+/**
+ * Queue-based upload manager to prevent race conditions
+ *
+ * This class ensures that media files are uploaded sequentially rather than concurrently,
+ * preventing race conditions that can cause upload failures and 404 errors when
+ * multiple files are uploaded simultaneously.
+ *
+ * Benefits:
+ * - Prevents server overload from concurrent uploads
+ * - Ensures consistent file storage in R2
+ * - Reduces the likelihood of 404 errors during tweet scheduling
+ * - Provides better error handling and retry logic
+ */
+class UploadQueue {
+  private queue: UploadQueueItem[] = [];
+  private isProcessing = false;
+  private onUploadComplete: (
+    item: UploadQueueItem,
+    success: boolean,
+    data?: any,
+  ) => void;
+
+  constructor(
+    onUploadComplete: (
+      item: UploadQueueItem,
+      success: boolean,
+      data?: any,
+    ) => void,
+  ) {
+    this.onUploadComplete = onUploadComplete;
+  }
+
+  /**
+   * Add an upload item to the queue
+   */
+  add(item: UploadQueueItem) {
+    this.queue.push(item);
+    this.processQueue();
+  }
+
+  /**
+   * Process the upload queue sequentially
+   */
+  private async processQueue() {
+    if (this.isProcessing || this.queue.length === 0) {
+      return;
+    }
+
+    this.isProcessing = true;
+
+    while (this.queue.length > 0) {
+      const item = this.queue.shift()!;
+
+      try {
+        console.log(
+          `Processing upload queue item: ${item.mediaFile.file.name}`,
+        );
+        const result = await this.uploadFile(item);
+        this.onUploadComplete(item, true, result);
+
+        // Add a small delay between uploads to prevent overwhelming the server
+        if (this.queue.length > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`Upload failed for ${item.mediaFile.file.name}:`, error);
+        this.onUploadComplete(item, false, error);
+
+        // Add a longer delay after failed uploads
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    this.isProcessing = false;
+  }
+
+  /**
+   * Upload a single file to the server
+   */
+  private async uploadFile(item: UploadQueueItem): Promise<any> {
+    const formData = new FormData();
+    formData.append("file", item.mediaFile.file);
+    formData.append("mediaType", item.mediaFile.type);
+
+    const response = await fetch("/api/media/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed with status: ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Get current queue length
+   */
+  get length() {
+    return this.queue.length;
+  }
+
+  /**
+   * Check if queue is processing
+   */
+  get processing() {
+    return this.isProcessing;
+  }
 }
 
 export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
@@ -89,6 +208,14 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   const [posting, setPosting] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Upload queue reference
+  const uploadQueueRef = useRef<UploadQueue | null>(null);
+
+  // Initialize upload queue
+  useEffect(() => {
+    uploadQueueRef.current = new UploadQueue(handleUploadComplete);
+  }, []);
 
   // Set up WebSocket for real-time feedback
   useTwitterWebSocket(userId || null, {
@@ -128,6 +255,108 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     fetchAccounts();
     fetchCommunities();
   }, []);
+
+  /**
+   * Handle upload completion from queue
+   */
+  const handleUploadComplete = useCallback(
+    (item: UploadQueueItem, success: boolean, data?: any) => {
+      if (success && data?.success) {
+        // Update the appropriate state based on whether it's a thread or single tweet
+        if (
+          item.isThread &&
+          item.tweetIndex !== undefined &&
+          item.mediaIndex !== undefined
+        ) {
+          setThreadTweets((prevTweets) =>
+            prevTweets.map((tweet, i) =>
+              i === item.tweetIndex
+                ? {
+                    ...tweet,
+                    mediaFiles: tweet.mediaFiles.map((file, j) =>
+                      j === item.mediaIndex
+                        ? {
+                            ...file,
+                            uploading: false,
+                            uploaded: true,
+                            uploadProgress: 100,
+                            r2Key: data.file.key,
+                            r2Url: data.file.url,
+                          }
+                        : file,
+                    ),
+                  }
+                : tweet,
+            ),
+          );
+        } else {
+          setMediaFiles((prev) =>
+            prev.map((file, i) =>
+              i === item.index
+                ? {
+                    ...file,
+                    uploading: false,
+                    uploaded: true,
+                    uploadProgress: 100,
+                    r2Key: data.file.key,
+                    r2Url: data.file.url,
+                  }
+                : file,
+            ),
+          );
+        }
+
+        toast.success(
+          `${item.mediaFile.type === "video" ? "Video" : "Image"} uploaded successfully!`,
+        );
+      } else {
+        // Handle upload failure
+        if (
+          item.isThread &&
+          item.tweetIndex !== undefined &&
+          item.mediaIndex !== undefined
+        ) {
+          setThreadTweets((prevTweets) =>
+            prevTweets.map((tweet, i) =>
+              i === item.tweetIndex
+                ? {
+                    ...tweet,
+                    mediaFiles: tweet.mediaFiles.map((file, j) =>
+                      j === item.mediaIndex
+                        ? {
+                            ...file,
+                            uploading: false,
+                            uploaded: false,
+                            uploadProgress: 0,
+                            error: "Upload failed",
+                          }
+                        : file,
+                    ),
+                  }
+                : tweet,
+            ),
+          );
+        } else {
+          setMediaFiles((prev) =>
+            prev.map((file, i) =>
+              i === item.index
+                ? {
+                    ...file,
+                    uploading: false,
+                    uploaded: false,
+                    uploadProgress: 0,
+                    error: "Upload failed",
+                  }
+                : file,
+            ),
+          );
+        }
+
+        toast.error("Failed to upload file");
+      }
+    },
+    [],
+  );
 
   // Fetches connected Twitter accounts from the API
   const fetchAccounts = async () => {
@@ -189,103 +418,30 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
 
       setMediaFiles((prev) => [...prev, ...newMediaFiles]);
 
-      // Start uploading files
+      // Add files to upload queue instead of uploading immediately
       for (let i = 0; i < newMediaFiles.length; i++) {
         const mediaFile = newMediaFiles[i];
-        await uploadMediaFile(mediaFile, currentFileCount + i);
+        const queueIndex = currentFileCount + i;
+
+        // Set uploading status immediately
+        setMediaFiles((prev) =>
+          prev.map((file, j) =>
+            j === queueIndex
+              ? { ...file, uploading: true, uploadProgress: 0 }
+              : file,
+          ),
+        );
+
+        // Add to upload queue
+        uploadQueueRef.current?.add({
+          mediaFile,
+          index: queueIndex,
+          isThread: false,
+        });
       }
     },
     [mediaFiles.length],
   );
-
-  // Uploads a media file to the server
-  const uploadMediaFile = async (mediaFile: MediaFile, index: number) => {
-    try {
-      // Update file status to uploading
-      setMediaFiles((prev) =>
-        prev.map((file, i) =>
-          i === index ? { ...file, uploading: true, uploadProgress: 0 } : file,
-        ),
-      );
-
-      const formData = new FormData();
-      formData.append("file", mediaFile.file);
-      formData.append("mediaType", mediaFile.type);
-
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setMediaFiles((prev) =>
-          prev.map((file, i) =>
-            i === index &&
-            file.uploadProgress !== undefined &&
-            file.uploadProgress < 90
-              ? { ...file, uploadProgress: file.uploadProgress + 10 }
-              : file,
-          ),
-        );
-      }, 200);
-
-      const response = await fetch("/api/media/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      clearInterval(progressInterval);
-
-      const data = await response.json();
-
-      if (data.success) {
-        setMediaFiles((prev) =>
-          prev.map((file, i) =>
-            i === index
-              ? {
-                  ...file,
-                  uploading: false,
-                  uploaded: true,
-                  uploadProgress: 100,
-                  r2Key: data.file.key,
-                  r2Url: data.file.url,
-                }
-              : file,
-          ),
-        );
-        toast.success(
-          `${mediaFile.type === "video" ? "Video" : "Image"} uploaded successfully!`,
-        );
-      } else {
-        setMediaFiles((prev) =>
-          prev.map((file, i) =>
-            i === index
-              ? {
-                  ...file,
-                  uploading: false,
-                  uploaded: false,
-                  uploadProgress: 0,
-                  error: data.error,
-                }
-              : file,
-          ),
-        );
-        toast.error(data.error || "Failed to upload file");
-      }
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      setMediaFiles((prev) =>
-        prev.map((file, i) =>
-          i === index
-            ? {
-                ...file,
-                uploading: false,
-                uploaded: false,
-                uploadProgress: 0,
-                error: "Upload failed",
-              }
-            : file,
-        ),
-      );
-      toast.error("Failed to upload file");
-    }
-  };
 
   // Removes a media file from the composer
   const removeMediaFile = async (index: number) => {
@@ -390,21 +546,12 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     const updatedMediaFiles = [...tweet.mediaFiles, ...newMediaFiles];
     updateThreadTweetMedia(tweetIndex, updatedMediaFiles);
 
-    // Start uploading files
+    // Add files to upload queue
     for (let i = 0; i < newMediaFiles.length; i++) {
       const mediaFile = newMediaFiles[i];
-      await uploadTweetMediaFile(tweetIndex, currentFileCount + i, mediaFile);
-    }
-  };
+      const mediaIndex = currentFileCount + i;
 
-  // Uploads a media file for a specific tweet
-  const uploadTweetMediaFile = async (
-    tweetIndex: number,
-    mediaIndex: number,
-    mediaFile: MediaFile,
-  ) => {
-    try {
-      // Update file status to uploading using functional update
+      // Set uploading status immediately
       setThreadTweets((prevTweets) =>
         prevTweets.map((tweet, i) =>
           i === tweetIndex
@@ -420,109 +567,14 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         ),
       );
 
-      const formData = new FormData();
-      formData.append("file", mediaFile.file);
-      formData.append("mediaType", mediaFile.type);
-
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setThreadTweets((prevTweets) =>
-          prevTweets.map((tweet, i) =>
-            i === tweetIndex
-              ? {
-                  ...tweet,
-                  mediaFiles: tweet.mediaFiles.map((file, j) =>
-                    j === mediaIndex &&
-                    file.uploadProgress !== undefined &&
-                    file.uploadProgress < 90
-                      ? { ...file, uploadProgress: file.uploadProgress + 10 }
-                      : file,
-                  ),
-                }
-              : tweet,
-          ),
-        );
-      }, 200);
-
-      const response = await fetch("/api/media/upload", {
-        method: "POST",
-        body: formData,
+      // Add to upload queue
+      uploadQueueRef.current?.add({
+        mediaFile,
+        index: mediaIndex,
+        isThread: true,
+        tweetIndex,
+        mediaIndex,
       });
-
-      clearInterval(progressInterval);
-      const data = await response.json();
-
-      if (data.success) {
-        setThreadTweets((prevTweets) =>
-          prevTweets.map((tweet, i) =>
-            i === tweetIndex
-              ? {
-                  ...tweet,
-                  mediaFiles: tweet.mediaFiles.map((file, j) =>
-                    j === mediaIndex
-                      ? {
-                          ...file,
-                          uploading: false,
-                          uploaded: true,
-                          uploadProgress: 100,
-                          r2Key: data.file.key,
-                          r2Url: data.file.url,
-                        }
-                      : file,
-                  ),
-                }
-              : tweet,
-          ),
-        );
-        toast.success(
-          `${mediaFile.type === "video" ? "Video" : "Image"} uploaded successfully!`,
-        );
-      } else {
-        setThreadTweets((prevTweets) =>
-          prevTweets.map((tweet, i) =>
-            i === tweetIndex
-              ? {
-                  ...tweet,
-                  mediaFiles: tweet.mediaFiles.map((file, j) =>
-                    j === mediaIndex
-                      ? {
-                          ...file,
-                          uploading: false,
-                          uploaded: false,
-                          uploadProgress: 0,
-                          error: data.error,
-                        }
-                      : file,
-                  ),
-                }
-              : tweet,
-          ),
-        );
-        toast.error(data.error || "Failed to upload file");
-      }
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      setThreadTweets((prevTweets) =>
-        prevTweets.map((tweet, i) =>
-          i === tweetIndex
-            ? {
-                ...tweet,
-                mediaFiles: tweet.mediaFiles.map((file, j) =>
-                  j === mediaIndex
-                    ? {
-                        ...file,
-                        uploading: false,
-                        uploaded: false,
-                        uploadProgress: 0,
-                        error: "Upload failed",
-                      }
-                    : file,
-                ),
-              }
-            : tweet,
-        ),
-      );
-      toast.error("Failed to upload file");
     }
   };
 
@@ -925,6 +977,11 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   const hasUploadingMedia = isThread
     ? threadTweets.some((t) => t.mediaFiles.some((f) => f.uploading))
     : mediaFiles.some((file) => file.uploading);
+
+  // Check queue status
+  const isQueueProcessing = uploadQueueRef.current?.processing || false;
+  const queueLength = uploadQueueRef.current?.length || 0;
+
   const characterCount = getCharacterCount(currentContent);
   const hashtags = extractHashtags(currentContent);
   const mentions = extractMentions(currentContent);
@@ -1007,6 +1064,18 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     <label className="text-sm font-medium">
                       Media (Images & Videos)
                     </label>
+
+                    {/* Upload Queue Status */}
+                    {(isQueueProcessing || queueLength > 0) && (
+                      <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+                        <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
+                        <span className="text-sm text-muted-foreground">
+                          {isQueueProcessing
+                            ? `Processing uploads... (${queueLength} remaining)`
+                            : `${queueLength} files queued for upload`}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Dropzone */}
                     {mediaFiles.length < 4 && (
@@ -1207,6 +1276,14 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                             )}
                           </div>
                         </div>
+
+                        {/* Thread Upload Queue Status */}
+                        {tweet.mediaFiles.some((f) => f.uploading) && (
+                          <div className="flex items-center gap-2 p-2 bg-muted/30 rounded text-xs text-muted-foreground">
+                            <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
+                            <span>Processing media uploads...</span>
+                          </div>
+                        )}
 
                         <div
                           className="relative"
