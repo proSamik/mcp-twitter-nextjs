@@ -608,12 +608,8 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         (contentToPost[0] as ThreadTweetData).content.trim()
       : contentToPost.length > 0 && (contentToPost[0] as string).trim();
 
-    const hasMediaFiles = isThread
-      ? threadTweets.some((t) => t.mediaFiles.length > 0)
-      : mediaFiles.length > 0;
-
-    if (!hasContent && !hasMediaFiles) {
-      toast.error("Tweet content or media is required");
+    if (!hasContent) {
+      toast.error("Tweet content is required");
       return;
     }
 
@@ -716,12 +712,8 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         (contentToPost[0] as ThreadTweetData).content.trim()
       : contentToPost.length > 0 && (contentToPost[0] as string).trim();
 
-    const hasMediaFiles = isThread
-      ? threadTweets.some((t) => t.mediaFiles.length > 0)
-      : mediaFiles.length > 0;
-
-    if (!hasContent && !hasMediaFiles) {
-      toast.error("Tweet content or media is required");
+    if (!hasContent) {
+      toast.error("Tweet content is required");
       return;
     }
 
@@ -846,18 +838,13 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   const handleSaveDraft = async () => {
     const contentToSave = isThread
       ? threadTweets
-          .filter((t) => t.content.trim() || t.mediaFiles.length > 0)
+          .filter((t) => t.content.trim())
           .map((t) => t.content)
           .join("\n\n")
       : content;
 
-    if (
-      !contentToSave.trim() &&
-      (isThread
-        ? !threadTweets.some((t) => t.mediaFiles.length > 0)
-        : mediaFiles.length === 0)
-    ) {
-      toast.error("Tweet content or media is required");
+    if (!contentToSave.trim()) {
+      toast.error("Tweet content is required");
       return;
     }
 
@@ -952,11 +939,9 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-5 w-5 text-primary" />
                 <div>
-                  <div className="text-lg font-semibold">
-                    Media Tweet Composer
-                  </div>
+                  <div className="text-lg font-semibold">Tweet Composer</div>
                   <div className="text-sm text-muted-foreground">
-                    Create tweets with images and videos
+                    Create tweets with optional media (images and videos)
                   </div>
                 </div>
               </div>
@@ -1055,7 +1040,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                             className="relative border rounded-lg overflow-hidden"
                           >
                             {/* Media Preview */}
-                            <div className="aspect-square bg-muted relative">
+                            <div className="aspect-square bg-muted relative max-h-48">
                               {mediaFile.type === "video" ? (
                                 <div className="w-full h-full flex items-center justify-center">
                                   <Video className="h-8 w-8 text-muted-foreground" />
@@ -1327,7 +1312,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                                 className="relative border rounded-lg overflow-hidden group"
                               >
                                 {/* Media Preview */}
-                                <div className="aspect-video bg-muted relative">
+                                <div className="aspect-video bg-muted relative max-h-32">
                                   {mediaFile.type === "video" ? (
                                     <div className="w-full h-full flex items-center justify-center">
                                       <video
@@ -1460,10 +1445,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     onClick={handleSaveDraft}
                     variant="outline"
                     disabled={
-                      (!currentContent.trim() &&
-                        (isThread
-                          ? !threadTweets.some((t) => t.mediaFiles.length > 0)
-                          : mediaFiles.length === 0)) ||
+                      !currentContent.trim() ||
                       !selectedAccount ||
                       saving ||
                       hasUploadingMedia ||
@@ -1492,10 +1474,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     <Button
                       onClick={handleScheduleTweet}
                       disabled={
-                        (!currentContent.trim() &&
-                          (isThread
-                            ? !threadTweets.some((t) => t.mediaFiles.length > 0)
-                            : mediaFiles.length === 0)) ||
+                        !currentContent.trim() ||
                         !selectedAccount ||
                         !scheduleDateTime ||
                         scheduling ||
@@ -1515,10 +1494,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                     <Button
                       onClick={handlePostNow}
                       disabled={
-                        (!currentContent.trim() &&
-                          (isThread
-                            ? !threadTweets.some((t) => t.mediaFiles.length > 0)
-                            : mediaFiles.length === 0)) ||
+                        !currentContent.trim() ||
                         !selectedAccount ||
                         posting ||
                         hasUploadingMedia ||

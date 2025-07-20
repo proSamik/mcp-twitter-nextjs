@@ -107,11 +107,12 @@ export const TweetSchema = pgTable("tweet", {
   postedAt: timestamp("posted_at", { withTimezone: true }),
   twitterTweetId: text("twitter_tweet_id"), // ID from Twitter API when posted
   qstashMessageId: text("qstash_message_id"), // QStash message ID for cancellation
-  parentTweetId: uuid("parent_tweet_id"), // For threading
-  threadOrder: integer("thread_order").default(0),
   mediaUrls: json("media_urls").default([]).$type<string[]>(),
   hashtags: json("hashtags").default([]).$type<string[]>(),
   mentions: json("mentions").default([]).$type<string[]>(),
+  threadTweets: json("thread_tweets")
+    .default([])
+    .$type<{ content: string; mediaIds: string[] }[]>(),
   communityId: text("community_id"),
   priority: integer("priority").notNull().default(0),
   tags: json("tags").default([]).$type<string[]>(),
@@ -122,27 +123,6 @@ export const TweetSchema = pgTable("tweet", {
     views?: number;
     impressions?: number;
   }>(),
-  twitterAccountId: uuid("twitter_account_id")
-    .notNull()
-    .references(() => TwitterAccountSchema.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => UserSchema.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-});
-
-export const TweetThreadSchema = pgTable("tweet_thread", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  title: text("title").notNull(),
-  description: text("description"),
-  status: text("status").notNull().default("draft"), // "draft", "scheduled", "posted", "failed"
-  scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
-  postedAt: timestamp("posted_at", { withTimezone: true }),
   twitterAccountId: uuid("twitter_account_id")
     .notNull()
     .references(() => TwitterAccountSchema.id, { onDelete: "cascade" }),
@@ -244,12 +224,31 @@ export const oauthConsent = pgTable("oauth_consent", {
   consentGiven: boolean("consent_given"),
 });
 
+export const UserOAuthCredentialsSchema = pgTable("user_oauth_credentials", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => UserSchema.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(), // "twitter", "github", etc.
+  clientId: text("client_id").notNull(),
+  clientSecretHash: text("client_secret_hash").notNull(), // Hashed secret
+  redirectUri: text("redirect_uri").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
 export type UserEntity = typeof UserSchema.$inferSelect;
 export type TwitterAccountEntity = typeof TwitterAccountSchema.$inferSelect;
 export type TweetEntity = typeof TweetSchema.$inferSelect;
-export type TweetThreadEntity = typeof TweetThreadSchema.$inferSelect;
 export type ApiKeyEntity = typeof ApiKeySchema.$inferSelect;
 export type CommunityEntity = typeof CommunitySchema.$inferSelect;
 export type oauthApplicationEntity = typeof oauthApplication.$inferSelect;
 export type oauthAccessTokenEntity = typeof oauthAccessToken.$inferSelect;
 export type oauthConsentEntity = typeof oauthConsent.$inferSelect;
+export type UserOAuthCredentialsEntity =
+  typeof UserOAuthCredentialsSchema.$inferSelect;

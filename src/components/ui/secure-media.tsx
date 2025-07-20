@@ -127,11 +127,17 @@ export function SecureMediaGrid({
 }: SecureMediaGridProps) {
   if (mediaKeys.length === 0) return null;
 
+  const getGridCols = () => {
+    if (mediaKeys.length === 1) return "grid-cols-1";
+    if (mediaKeys.length === 2) return "grid-cols-2";
+    return "grid-cols-2";
+  };
+
   return (
-    <div className={`grid gap-2 grid-cols-2 ${className}`}>
+    <div className={`grid gap-2 ${getGridCols()} max-w-sm ${className}`}>
       {mediaKeys.map((mediaKey, index) => (
         <div key={index} className="relative border rounded-lg overflow-hidden">
-          <div className="aspect-video bg-muted relative">
+          <div className="aspect-square bg-muted relative w-full">
             <SecureMedia
               mediaKey={mediaKey}
               alt={`Media ${index + 1}`}

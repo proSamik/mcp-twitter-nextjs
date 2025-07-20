@@ -247,8 +247,8 @@ export function AppSidebar({
             </div>
           </SidebarBody>
         </Sidebar>
-        <div className="flex flex-1">
-          <div className="flex h-full w-full flex-1 flex-col gap-2 rounded-tl-2xl border border-sidebar-border bg-background p-2 md:p-6">
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex h-full w-full flex-1 flex-col gap-2 rounded-tl-2xl border border-sidebar-border bg-background p-2 md:p-6 overflow-y-auto">
             {children}
           </div>
         </div>

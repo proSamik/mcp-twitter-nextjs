@@ -123,6 +123,13 @@ export async function POST(request: NextRequest) {
                 : threadTweets?.join("\n\n") || ""
               : content,
           ),
+          threadTweets:
+            isThread && threadData && threadData.length > 0
+              ? threadData.map((tweet: any) => ({
+                  content: tweet.content,
+                  mediaIds: tweet.mediaIds || [],
+                }))
+              : [],
           communityId: communityId || null,
           twitterAccountId,
           userId,

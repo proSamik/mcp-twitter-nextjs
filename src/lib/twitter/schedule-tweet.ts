@@ -18,29 +18,16 @@ export async function scheduleTweetInternal(params: {
   delaySeconds?: number;
 }) {
   try {
-    const {
-      nanoId,
-      scheduleDate,
-      content,
-      userId,
-      twitterAccountId,
-      mediaIds,
-      isThread,
-      threadTweets,
-      threadData,
-      delaySeconds,
-    } = params;
+    const { nanoId, scheduleDate, userId, twitterAccountId, delaySeconds } =
+      params;
     const result = await getTweetScheduler().scheduleTweet(
       nanoId,
       scheduleDate,
       {
-        content,
+        type: "tweet",
+        tweetId: nanoId,
         userId,
         twitterAccountId,
-        mediaIds,
-        isThread,
-        threadTweets,
-        threadData,
       },
       delaySeconds,
     );

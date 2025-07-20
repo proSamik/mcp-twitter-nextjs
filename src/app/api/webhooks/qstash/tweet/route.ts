@@ -51,16 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const {
-      tweetId,
-      content,
-      userId,
-      twitterAccountId,
-      mediaIds,
-      isThread,
-      threadTweets,
-      threadData,
-    } = payload;
+    const { tweetId, userId, twitterAccountId } = payload;
 
     console.log(`Processing scheduled tweet: ${tweetId} for user: ${userId}`);
     console.log("Webhook payload:", JSON.stringify(payload, null, 2));
@@ -87,6 +78,12 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+
+      // Extract tweet data from database
+      const content = tweet.content;
+      const mediaIds = tweet.mediaUrls || [];
+      const isThread = tweet.tweetType === "thread";
+      const threadData = tweet.threadTweets || [];
 
       // Get Twitter client for the account
       const twitterClient = await twitterAuthManager.getTwitterClient(
@@ -137,45 +134,27 @@ export async function POST(request: NextRequest) {
       let twitterTweetId: string;
       let postedTweets: any[] = [];
 
-      if (
-        isThread &&
-        ((threadTweets && threadTweets.length > 1) ||
-          (threadData && threadData.length > 1))
-      ) {
-        // Post as thread
-        let tweetsToPost: string[];
-        let mediaIdsPerTweet: string[][] | undefined;
+      if (isThread && threadData && threadData.length > 1) {
+        // Post as thread with proper thread data structure
+        console.log(`Posting thread with ${threadData.length} tweets`);
 
-        if (threadData && threadData.length > 0) {
-          // New format with per-tweet media
-          console.log(
-            `Posting thread with ${threadData.length} tweets (with per-tweet media)`,
-          );
-          tweetsToPost = threadData.map((tweet) => tweet.content);
+        const tweetsToPost: string[] = [];
+        const mediaIdsPerTweet: string[][] = [];
 
-          // Process media for each tweet
-          const allMediaIds: string[][] = [];
-          for (const tweet of threadData) {
-            if (tweet.mediaIds && tweet.mediaIds.length > 0) {
-              const processedMediaIds =
-                await mediaProcessor.processMediaForTwitter(
-                  tweet.mediaIds,
-                  twitterClient,
-                );
-              allMediaIds.push(processedMediaIds);
-            } else {
-              allMediaIds.push([]);
-            }
+        // Process each tweet in the thread
+        for (const tweetData of threadData) {
+          tweetsToPost.push(tweetData.content);
+
+          if (tweetData.mediaIds && tweetData.mediaIds.length > 0) {
+            const processedMediaIds =
+              await mediaProcessor.processMediaForTwitter(
+                tweetData.mediaIds,
+                twitterClient,
+              );
+            mediaIdsPerTweet.push(processedMediaIds);
+          } else {
+            mediaIdsPerTweet.push([]);
           }
-          mediaIdsPerTweet = allMediaIds;
-        } else {
-          // Legacy format
-          console.log(
-            `Posting thread with ${threadTweets!.length} tweets (legacy format)`,
-          );
-          tweetsToPost = threadTweets!;
-          mediaIdsPerTweet =
-            twitterMediaIds.length > 0 ? [twitterMediaIds] : undefined;
         }
 
         const threadOptions: any = {
@@ -221,7 +200,24 @@ export async function POST(request: NextRequest) {
       }
 
       // Clean up media files from Cloudflare R2 after successful posting
+      const allMediaKeys: string[] = [];
+
+      // Add main tweet media
       if (mediaIds && mediaIds.length > 0) {
+        allMediaKeys.push(...mediaIds);
+      }
+
+      // Add thread media
+      if (isThread && threadData) {
+        for (const tweetData of threadData) {
+          if (tweetData.mediaIds && tweetData.mediaIds.length > 0) {
+            allMediaKeys.push(...tweetData.mediaIds);
+          }
+        }
+      }
+
+      // Clean up all media files
+      if (allMediaKeys.length > 0) {
         try {
           await fetch(
             `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/media/delete`,
@@ -231,12 +227,12 @@ export async function POST(request: NextRequest) {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                keys: mediaIds,
+                keys: allMediaKeys,
               }),
             },
           );
           console.log(
-            `Cleaned up ${mediaIds.length} media files for tweet ${tweetId}`,
+            `Cleaned up ${allMediaKeys.length} media files for tweet ${tweetId}`,
           );
         } catch (cleanupError) {
           console.warn("Failed to cleanup media files:", cleanupError);

@@ -66,15 +66,33 @@ export async function POST(request: NextRequest) {
       !scheduledFor.includes("+")
     ) {
       // Local datetime format - convert from user's timezone to UTC
-      const localDate = new Date(scheduledFor);
-      const utcDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: "UTC" }),
-      );
-      const userDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: timezone }),
-      );
-      const timezoneOffset = userDate.getTime() - utcDate.getTime();
-      scheduleDate = new Date(localDate.getTime() - timezoneOffset);
+      // The scheduledFor is like "2025-07-20T16:27" in the user's local timezone
+
+      // Simple and reliable timezone conversion:
+      // 1. Create a date string that represents the user's local time
+      // 2. Parse it as if it were UTC to get a Date object
+      // 3. Then adjust by the timezone offset
+
+      const dateTimeString = scheduledFor.includes(":")
+        ? scheduledFor + ":00"
+        : scheduledFor + ":00:00";
+
+      // Create a date by treating the input as UTC first
+      const utcDate = new Date(dateTimeString + "Z");
+
+      // Get the current timezone offset for the user's timezone at this date/time
+      // This properly handles DST
+      const tempLocalDate = new Date(dateTimeString);
+      const offsetAtDate =
+        new Date(
+          tempLocalDate.toLocaleString("en-US", { timeZone: "UTC" }),
+        ).getTime() -
+        new Date(
+          tempLocalDate.toLocaleString("en-US", { timeZone: timezone }),
+        ).getTime();
+
+      // Apply the offset to convert from user's timezone to UTC
+      scheduleDate = new Date(utcDate.getTime() + offsetAtDate);
     } else {
       // Already UTC or has timezone info
       scheduleDate = new Date(scheduledFor);
@@ -89,6 +107,7 @@ export async function POST(request: NextRequest) {
     console.log("scheduledFor:", scheduledFor);
     console.log("timezone:", timezone);
     console.log("scheduleDate UTC:", scheduleDate.toISOString());
+    console.log("current time UTC:", now.toISOString());
     console.log("calculated delaySeconds:", delaySeconds);
 
     // Check 7-day limit
@@ -175,6 +194,13 @@ export async function POST(request: NextRequest) {
               : threadTweets?.join("\n\n") || ""
             : content,
         ),
+        threadTweets:
+          isThread && threadData && threadData.length > 0
+            ? threadData.map((tweet: any) => ({
+                content: tweet.content,
+                mediaIds: tweet.mediaIds || [],
+              }))
+            : [],
         tags,
         twitterAccountId,
         userId,

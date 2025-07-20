@@ -43,6 +43,20 @@
       "when": 1752911609883,
       "tag": "0005_yielding_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1753001916643,
+      "tag": "0006_organic_toad",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1753002920600,
+      "tag": "0007_colorful_sphinx",
+      "breakpoints": true
     }
   ]
 }

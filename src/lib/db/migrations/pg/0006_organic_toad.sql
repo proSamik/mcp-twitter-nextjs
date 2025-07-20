@@ -1,0 +1,1 @@
+ALTER TABLE "tweet" ADD COLUMN "thread_tweets" json DEFAULT '[]'::json;
