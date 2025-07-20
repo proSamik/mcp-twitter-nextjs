@@ -211,6 +211,44 @@ Comprehensive Twitter/X management platform with multi-account support and AI in
   - Batch operations support
 
 ### MCP (Model Context Protocol) Integration
+
+### OAuth 2.0 Authentication
+The MCP server supports OAuth 2.0 with PKCE for secure client authentication:
+
+**OAuth Endpoints:**
+- Authorization Server: `/.well-known/oauth-authorization-server`
+- Protected Resource: `/.well-known/oauth-protected-resource`
+- Client Registration: `/api/auth/mcp/register`
+- Authorization: `/api/auth/mcp/authorize`
+- Token: `/api/auth/mcp/token`
+- User Info: `/api/auth/mcp/userinfo`
+- JWKS: `/api/auth/mcp/jwks`
+
+**Supported Scopes:**
+- `openid` - OpenID Connect
+- `profile` - User profile information
+- `email` - User email address
+
+**Known Issues:**
+- `offline_access` scope is advertised but not supported due to Better Auth 1.2.10 limitations
+- OAuth flows work correctly when `offline_access` is excluded from scope requests
+
+**Configuration:**
+```typescript
+// src/lib/auth/server.ts
+mcp({
+  loginPage: "/sign-in",
+})
+```
+
+### Database Schema
+OAuth-related tables with UUID primary keys:
+- `oauth_application` - Registered OAuth clients
+- `oauth_access_token` - Access tokens and refresh tokens
+- `oauth_consent` - User consent records
+
+### API Key Authentication (Legacy)
+For clients that don't support OAuth, API key authentication is available via the `ApiKeySchema` table.
 - **MCP Server** (`src/app/api/mcp/route.ts`):
   - Tools: `list_tweets`, `create_tweet`, `schedule_tweet`, `delete_tweet`
   - Claude AI integration for content optimization

@@ -3,19 +3,19 @@
 import { enhancedAuthClient } from "auth/client";
 import { authClient } from "auth/client";
 import { useEffect, useState, Suspense, useRef } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "ui/card";
+import { Card, CardContent, CardHeader } from "ui/card";
 import { Badge } from "ui/badge";
-import { Crown, CreditCard } from "lucide-react";
+import { Button } from "ui/button";
+import { Crown, CreditCard, Calendar, Users } from "lucide-react";
 import { Skeleton } from "ui/skeleton";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { ConnectedAccounts } from "@/components/twitter/connected-accounts";
-import { TweetComposer } from "@/components/twitter/tweet-composer";
+import { MediaTweetComposer } from "@/components/twitter/media-composer/media-tweet-composer";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "ui/tabs";
 import { TweetList } from "@/components/twitter/tweet-list";
+// UsageDisplay removed - not available for basic Twitter API
 
 type Order = {
   id: string;
@@ -237,7 +237,11 @@ function DashboardContent() {
           { name: "MCP Integration", enabled: true, limit: "Claude AI access" },
           { name: "Bulk Operations", enabled: true, limit: "Mass scheduling" },
           { name: "Content Calendar", enabled: true, limit: "Full planning" },
-          { name: "AI Optimization", enabled: true, limit: "Smart suggestions" },
+          {
+            name: "AI Optimization",
+            enabled: true,
+            limit: "Smart suggestions",
+          },
           { name: "Priority Support", enabled: true, limit: "Dedicated line" },
           {
             name: "Lifetime Updates",
@@ -279,21 +283,129 @@ function DashboardContent() {
       </div>
 
       {/* Twitter Management Dashboard */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Connected X Accounts */}
-        <div className="col-span-full lg:col-span-1">
-          <ConnectedAccounts />
+      <div className="space-y-6">
+        {/* Desktop Layout */}
+        <div className="hidden lg:flex gap-8">
+          {/* Left Column - Management Cards */}
+          <div className="flex flex-col gap-6 w-80">
+            {/* Connected Accounts Card */}
+            <ConnectedAccounts />
+
+            {/* Social Calendar Card */}
+            <Card className="h-fit">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold">Social Calendar</h3>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  View and manage your scheduled posts in calendar view
+                </p>
+                <Link href="/social-calendar">
+                  <Button className="w-full">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Open Calendar
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            {/* Communities Card */}
+            <Card className="h-fit">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold">Communities</h3>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Manage your Twitter communities for targeted posting
+                </p>
+                <Link href="/communities">
+                  <Button className="w-full">
+                    <Users className="h-4 w-4 mr-2" />
+                    Manage Communities
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column - Tweet Composer */}
+          <div className="flex-1 pl-4">
+            <MediaTweetComposer userId={session?.user?.id} />
+          </div>
         </div>
 
-        {/* Tweet Composer & Scheduler */}
-        <div className="col-span-full lg:col-span-2">
-          <TweetComposer userId={session?.user?.id} />
+        {/* Mobile Layout with Tabs */}
+        <div className="lg:hidden">
+          <Tabs defaultValue="accounts" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="accounts">Accounts</TabsTrigger>
+              <TabsTrigger value="calendar">Calendar</TabsTrigger>
+              <TabsTrigger value="communities">Communities</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="accounts" className="mt-6">
+              <ConnectedAccounts />
+            </TabsContent>
+
+            <TabsContent value="calendar" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold">Social Calendar</h3>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    View and manage your scheduled posts in calendar view
+                  </p>
+                  <Link href="/social-calendar">
+                    <Button className="w-full">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Open Calendar
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="communities" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold">Communities</h3>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Manage your Twitter communities for targeted posting
+                  </p>
+                  <Link href="/communities">
+                    <Button className="w-full">
+                      <Users className="h-4 w-4 mr-2" />
+                      Manage Communities
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          {/* Mobile Tweet Composer */}
+          <div className="mt-6">
+            <MediaTweetComposer userId={session?.user?.id} />
+          </div>
         </div>
 
         {/* Tweet Management - Dynamic list with real data */}
-        <div className="col-span-full">
-          <TweetList userId={session?.user?.id || ""} />
-        </div>
+        <TweetList userId={session?.user?.id || ""} />
       </div>
     </div>
   );

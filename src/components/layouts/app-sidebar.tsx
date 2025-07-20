@@ -12,6 +12,7 @@ import {
   IconCrown,
   IconGift,
   IconKey,
+  IconUsers,
 } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,13 @@ export function AppSidebar({
 }: {
   children: React.ReactNode;
   onNavigate: (
-    page: "dashboard" | "profile" | "settings" | "subscription" | "api-keys",
+    page:
+      | "dashboard"
+      | "profile"
+      | "settings"
+      | "subscription"
+      | "api-keys"
+      | "communities",
   ) => void;
   userTier?: UserTier;
 }) {
@@ -101,7 +108,7 @@ export function AppSidebar({
   const links = [
     {
       label: "Dashboard",
-      href: "#",
+      href: "/app",
       icon: (
         <div className="flex items-center gap-2">
           <IconBrandTabler className="h-5 w-5 shrink-0 text-sidebar-foreground" />
@@ -125,10 +132,13 @@ export function AppSidebar({
     },
     {
       label: "API Keys",
-      href: "#",
-      icon: (
-        <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />
-      ),
+      href: "/api-keys",
+      icon: <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
+    },
+    {
+      label: "Communities",
+      href: "/communities",
+      icon: <IconUsers className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
     },
     {
       label:
@@ -195,12 +205,15 @@ export function AppSidebar({
                         } else if (isSubscription) {
                           handleSubscriptionManagement();
                         } else {
-                          const pageName = link.label.toLowerCase().replace(/\s+/g, '-') as
-                              | "dashboard"
-                              | "profile"
-                              | "settings"
-                              | "subscription"
-                              | "api-keys";
+                          const pageName = link.label
+                            .toLowerCase()
+                            .replace(/\s+/g, "-") as
+                            | "dashboard"
+                            | "profile"
+                            | "settings"
+                            | "subscription"
+                            | "api-keys"
+                            | "communities";
                           onNavigate(pageName);
                         }
                       }}
@@ -234,8 +247,8 @@ export function AppSidebar({
             </div>
           </SidebarBody>
         </Sidebar>
-        <div className="flex flex-1">
-          <div className="flex h-full w-full flex-1 flex-col gap-2 rounded-tl-2xl border border-sidebar-border bg-background p-2 md:p-6">
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex h-full w-full flex-1 flex-col gap-2 rounded-tl-2xl border border-sidebar-border bg-background p-2 md:p-6 overflow-y-auto">
             {children}
           </div>
         </div>

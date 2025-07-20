@@ -11,6 +11,7 @@ export default () => {
         "api.microlink.io", // Microlink images
         "images.unsplash.com", // Unsplash images
         "images.pexels.com", // Pexels images
+        "social-media-scheduler.456893f3709eea11fc391e81e0361029.r2.cloudflarestorage.com", // R2 bucket
       ],
     },
   };

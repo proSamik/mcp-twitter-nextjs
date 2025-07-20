@@ -93,7 +93,12 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
   const { data: session, isPending: isAuthLoading } = authClient.useSession();
   const { userTier, lifetimeOrders, isLoading: isTierLoading } = useUserTier();
   const [currentPage, setCurrentPage] = useState<
-    "dashboard" | "profile" | "settings" | "subscription" | "api-keys"
+    | "dashboard"
+    | "profile"
+    | "settings"
+    | "subscription"
+    | "api-keys"
+    | "communities"
   >("dashboard");
 
   // Redirect to sign-in if not authenticated
@@ -104,7 +109,13 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
   }, [session, isAuthLoading]);
 
   const handleNavigation = (
-    page: "dashboard" | "profile" | "settings" | "subscription" | "api-keys",
+    page:
+      | "dashboard"
+      | "profile"
+      | "settings"
+      | "subscription"
+      | "api-keys"
+      | "communities",
   ) => {
     setCurrentPage(page);
   };
@@ -127,6 +138,22 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
         );
       case "api-keys":
         return <ApiKeyManager />;
+      case "communities":
+        return (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <h1 className="text-3xl font-bold tracking-tight">Communities</h1>
+              <p className="text-muted-foreground">
+                Manage your Twitter communities and participation.
+              </p>
+            </div>
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">
+                Communities management coming soon.
+              </p>
+            </div>
+          </div>
+        );
       default:
         return children;
     }

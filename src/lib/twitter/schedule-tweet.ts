@@ -1,4 +1,4 @@
-import { getTweetScheduler } from '@/lib/upstash/qstash';
+import { getTweetScheduler } from "@/lib/upstash/qstash";
 
 /**
  * Schedule a tweet for future posting using QStash (internal logic, no HTTP fetch)
@@ -14,35 +14,26 @@ export async function scheduleTweetInternal(params: {
   mediaIds?: string[];
   isThread?: boolean;
   threadTweets?: string[];
+  threadData?: { content: string; mediaIds: string[] }[];
   delaySeconds?: number;
 }) {
   try {
-    const {
-      nanoId,
-      scheduleDate,
-      content,
-      userId,
-      twitterAccountId,
-      mediaIds,
-      isThread,
-      threadTweets,
-      delaySeconds,
-    } = params;
+    const { nanoId, scheduleDate, userId, twitterAccountId, delaySeconds } =
+      params;
     const result = await getTweetScheduler().scheduleTweet(
       nanoId,
       scheduleDate,
       {
-        content,
         userId,
         twitterAccountId,
-        mediaIds,
-        isThread,
-        threadTweets,
       },
-      delaySeconds
+      delaySeconds,
     );
     return { success: true, messageId: result.messageId };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
-} 
+}
