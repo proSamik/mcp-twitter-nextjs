@@ -8,7 +8,7 @@
 
 ## 🚀 What Makes This Special
 
-- **🤖 Claude MCP Integration** - First-class support for Claude Desktop with OAuth 2.0 authentication
+- **🤖 Claude MCP Integration** - First-class support for Claude Code with OAuth 2.0 authentication
 - **🐦 Multi-Account Twitter Management** - Connect and manage multiple Twitter/X accounts seamlessly
 - **⚡ Real-time Scheduling** - Reliable tweet scheduling with Upstash QStash and retry logic
 - **🔐 Enterprise Authentication** - OAuth 2.0 MCP server with PKCE, Better Auth, and API key management
@@ -19,7 +19,7 @@
 ## ✨ Core Features
 
 ### 🤖 Claude MCP Integration
-- **OAuth 2.0 Authentication** - Secure integration with Claude Desktop using industry-standard OAuth
+- **OAuth 2.0 Authentication** - Secure integration with Claude using industry-standard OAuth
 - **MCP Server** - Full Model Context Protocol implementation with Twitter management tools
 - **AI-Powered Content** - Generate, optimize, and schedule tweets with Claude's assistance
 - **Real-time Synchronization** - WebSocket support for live updates across all clients
@@ -39,7 +39,7 @@
 - **Performance Optimization** - AI-suggested optimal posting times
 
 ### 🔐 Enterprise Security
-- **OAuth 2.0 MCP Server** - Industry-standard authentication for Claude Desktop
+- **OAuth 2.0 MCP Server** - Industry-standard authentication for Claude
 - **User OAuth Credentials** - Encrypted storage of user-provided Twitter credentials
 - **API Key Management** - Secure API keys with scoped permissions and rotation
 - **Rate Limiting** - Intelligent rate limiting to respect Twitter API limits
@@ -214,17 +214,12 @@ This platform uses user-provided OAuth credentials instead of environment variab
 
 ### OAuth 2.0 Setup (Recommended)
 
-The MCP server supports OAuth 2.0 with PKCE for secure Claude Desktop integration:
+The MCP server supports OAuth 2.0 with PKCE for secure Claude integration:
 
 #### 1. Client Registration
 
 ```bash
-curl -X POST http://localhost:3000/api/auth/mcp/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "client_name": "Claude Desktop",
-    "redirect_uris": ["http://localhost:3000/oauth/callback"]
-  }'
+claude mcp add --transport http twitter-server http://localhost:3000/api/mcp
 ```
 
 #### 2. Claude Desktop Configuration
@@ -267,7 +262,7 @@ curl -X POST http://localhost:3000/api/auth/mcp/register \
 - `offline_access` - token refresh
 
 
-#### 2. Use with MCP Client
+#### 2. Use with any MCP Client
 
 ```json
 {
