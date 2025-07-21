@@ -145,7 +145,7 @@ export default function OAuthUserSetupPage() {
   };
 
   // Generate the correct redirect URI for this app
-  const appRedirectUri = `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/twitter/callback`;
+  const appRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback`;
 
   const handleCopyRedirectUri = async () => {
     try {
