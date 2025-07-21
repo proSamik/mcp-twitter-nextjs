@@ -209,7 +209,7 @@ const handler = withMcpAuth(auth, (req, session) => {
       // schedule tweet
       server.tool(
         "schedule_tweet",
-        "⏰ SCHEDULE EXISTING TWEET: Schedule an existing DRAFT tweet for posting at a specific time. Only works with tweets that have status='draft'. Use this to schedule drafts.",
+        "⏰ SCHEDULE EXISTING TWEET: Schedule an existing DRAFT tweet for posting at a specific time. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
         {
           nanoId: z.string().describe("Unique nanoId of the tweet to schedule"),
           scheduledFor: z
@@ -318,7 +318,7 @@ const handler = withMcpAuth(auth, (req, session) => {
       // reschedule tweet
       server.tool(
         "reschedule_tweet",
-        "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling.",
+        "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling. Note: Requires NEXT_PUBLIC_APP_URL to be set to a publicly accessible URL for QStash webhooks to work (localhost URLs will fail).",
         {
           nanoId: z
             .string()
@@ -363,7 +363,7 @@ const handler = withMcpAuth(auth, (req, session) => {
       // convert draft to scheduled
       server.tool(
         "convert_draft_to_scheduled",
-        "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
+        "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled. Note: Requires NEXT_PUBLIC_APP_URL to be set to a publicly accessible URL for QStash webhooks to work (localhost URLs will fail).",
         {
           nanoId: z
             .string()
@@ -518,6 +518,18 @@ const handler = withMcpAuth(auth, (req, session) => {
         "🔍 LIST TWITTER ACCOUNTS: List all Twitter accounts for the authenticated user, including accountId, username, displayName, and active status. Use this to select an account for tweet actions.",
         {},
         async (_args) => {
+          const rateLimitCheck = await checkRateLimit(
+            session.userId,
+            "list_twitter_accounts",
+            30,
+            60,
+          );
+          if (!rateLimitCheck.allowed) {
+            return createRateLimitResponse(
+              rateLimitCheck.remaining,
+              rateLimitCheck.resetTime,
+            );
+          }
           // Pass session.userId to the tool function
           const result = await listTwitterAccounts({}, session.userId);
           return { content: result.content };

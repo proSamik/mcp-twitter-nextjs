@@ -11,6 +11,7 @@ import { scheduleTweetInternal } from "@/lib/twitter/schedule-tweet";
 import { postTweetInternal } from "@/lib/twitter/post-tweet";
 import { CommunitySchema } from "@/lib/db/pg/schema.pg";
 import { z } from "zod";
+import { fromZonedTime } from "date-fns-tz";
 
 // Zod schemas for argument validation
 const listTweetsSchema = z.object({
@@ -387,24 +388,15 @@ export async function scheduleTweet(args: any, userId: string) {
       throw new Error("Only draft tweets can be scheduled");
     }
 
-    // Parse the scheduled time in user's timezone
-    // If scheduledFor doesn't include timezone info, treat it as user's local time
+    // Parse the scheduled time in user's timezone using date-fns-tz
     let scheduleDate: Date;
     if (
       scheduledFor.includes("T") &&
       !scheduledFor.includes("Z") &&
       !scheduledFor.includes("+")
     ) {
-      // Local datetime format - convert from user's timezone to UTC
-      const localDate = new Date(scheduledFor);
-      const utcDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: "UTC" }),
-      );
-      const userDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: timezone }),
-      );
-      const timezoneOffset = userDate.getTime() - utcDate.getTime();
-      scheduleDate = new Date(localDate.getTime() - timezoneOffset);
+      // Local datetime format - convert from user's timezone to UTC using date-fns-tz
+      scheduleDate = fromZonedTime(scheduledFor, timezone);
     } else {
       // Already UTC or has timezone info
       scheduleDate = new Date(scheduledFor);
@@ -730,23 +722,15 @@ export async function rescheduleTweet(args: any, userId: string) {
       throw new Error("Only scheduled tweets can be rescheduled");
     }
 
-    // Parse the scheduled time in user's timezone
+    // Parse the scheduled time in user's timezone using date-fns-tz
     let newScheduleDate: Date;
     if (
       newScheduledFor.includes("T") &&
       !newScheduledFor.includes("Z") &&
       !newScheduledFor.includes("+")
     ) {
-      // Local datetime format - convert from user's timezone to UTC
-      const localDate = new Date(newScheduledFor);
-      const utcDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: "UTC" }),
-      );
-      const userDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: timezone }),
-      );
-      const timezoneOffset = userDate.getTime() - utcDate.getTime();
-      newScheduleDate = new Date(localDate.getTime() - timezoneOffset);
+      // Local datetime format - convert from user's timezone to UTC using date-fns-tz
+      newScheduleDate = fromZonedTime(newScheduledFor, timezone);
     } else {
       // Already UTC or has timezone info
       newScheduleDate = new Date(newScheduledFor);
@@ -884,23 +868,15 @@ export async function convertDraftToScheduled(args: any, userId: string) {
       throw new Error("Only draft tweets can be converted to scheduled");
     }
 
-    // Parse the scheduled time in user's timezone
+    // Parse the scheduled time in user's timezone using date-fns-tz
     let scheduleDate: Date;
     if (
       scheduledFor.includes("T") &&
       !scheduledFor.includes("Z") &&
       !scheduledFor.includes("+")
     ) {
-      // Local datetime format - convert from user's timezone to UTC
-      const localDate = new Date(scheduledFor);
-      const utcDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: "UTC" }),
-      );
-      const userDate = new Date(
-        localDate.toLocaleString("en-US", { timeZone: timezone }),
-      );
-      const timezoneOffset = userDate.getTime() - utcDate.getTime();
-      scheduleDate = new Date(localDate.getTime() - timezoneOffset);
+      // Local datetime format - convert from user's timezone to UTC using date-fns-tz
+      scheduleDate = fromZonedTime(scheduledFor, timezone);
     } else {
       // Already UTC or has timezone info
       scheduleDate = new Date(scheduledFor);
