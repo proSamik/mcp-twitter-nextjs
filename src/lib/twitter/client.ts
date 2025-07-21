@@ -705,18 +705,35 @@ export const TwitterUtils = {
  */
 export class TwitterOAuth {
   private client: TwitterApi;
+  private clientId: string;
+  private clientSecret: string;
 
-  constructor() {
-    if (!process.env.TWITTER_CLIENT_ID || !process.env.TWITTER_CLIENT_SECRET) {
+  constructor(options?: { clientId?: string; clientSecret?: string }) {
+    // Use provided credentials or fall back to env variables
+    this.clientId = options?.clientId || process.env.TWITTER_CLIENT_ID || "";
+    this.clientSecret =
+      options?.clientSecret || process.env.TWITTER_CLIENT_SECRET || "";
+
+    if (!this.clientId || !this.clientSecret) {
       throw new Error(
-        "TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET are required",
+        "Twitter OAuth credentials are required (either provided or from environment variables)",
       );
     }
 
     this.client = new TwitterApi({
-      clientId: process.env.TWITTER_CLIENT_ID,
-      clientSecret: process.env.TWITTER_CLIENT_SECRET,
+      clientId: this.clientId,
+      clientSecret: this.clientSecret,
     });
+  }
+
+  /**
+   * Create TwitterOAuth instance with user-provided credentials
+   */
+  static withUserCredentials(
+    clientId: string,
+    clientSecret: string,
+  ): TwitterOAuth {
+    return new TwitterOAuth({ clientId, clientSecret });
   }
 
   /**

@@ -98,9 +98,20 @@ export class TweetScheduler {
       return { messageId: result.messageId };
     } catch (error) {
       console.error("Error scheduling tweet:", error);
-      throw new Error(
-        `Failed to schedule tweet: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+
+      // Check if it's the localhost issue
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      if (
+        errorMessage.includes("loopback") ||
+        errorMessage.includes("localhost")
+      ) {
+        throw new Error(
+          `Failed to schedule tweet: QStash cannot reach localhost webhook URLs. Please set NEXT_PUBLIC_APP_URL to a publicly accessible URL or use a tunneling service like ngrok for local development. Error: ${errorMessage}`,
+        );
+      }
+
+      throw new Error(`Failed to schedule tweet: ${errorMessage}`);
     }
   }
 
@@ -159,9 +170,20 @@ export class TweetScheduler {
       return { messageIds: [result.messageId] };
     } catch (error) {
       console.error("Error scheduling thread:", error);
-      throw new Error(
-        `Failed to schedule thread: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+
+      // Check if it's the localhost issue
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      if (
+        errorMessage.includes("loopback") ||
+        errorMessage.includes("localhost")
+      ) {
+        throw new Error(
+          `Failed to schedule thread: QStash cannot reach localhost webhook URLs. Please set NEXT_PUBLIC_APP_URL to a publicly accessible URL or use a tunneling service like ngrok for local development. Error: ${errorMessage}`,
+        );
+      }
+
+      throw new Error(`Failed to schedule thread: ${errorMessage}`);
     }
   }
 

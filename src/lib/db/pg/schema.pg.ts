@@ -88,6 +88,10 @@ export const TwitterAccountSchema = pgTable("twitter_account", {
   accessTokenExpiresAt: timestamp("access_token_expires_at", {
     withTimezone: true,
   }),
+  oauthCredentialsId: uuid("oauth_credentials_id").references(
+    () => UserOAuthCredentialsSchema.id,
+    { onDelete: "set null" },
+  ),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -129,38 +133,6 @@ export const TweetSchema = pgTable("tweet", {
   userId: uuid("user_id")
     .notNull()
     .references(() => UserSchema.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-});
-
-export const ApiKeySchema = pgTable("api_key", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  name: text("name").notNull(),
-  keyHash: text("key_hash").notNull().unique(),
-  keyPrefix: text("key_prefix").notNull(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => UserSchema.id, { onDelete: "cascade" }),
-  permissions: json("permissions")
-    .default({
-      read: true,
-      create: true,
-      update: true,
-      delete: false,
-    })
-    .$type<{
-      read: boolean;
-      create: boolean;
-      update: boolean;
-      delete: boolean;
-    }>(),
-  isActive: boolean("is_active").default(true).notNull(),
-  lastUsedAt: timestamp("last_used_at"),
-  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
@@ -245,7 +217,6 @@ export const UserOAuthCredentialsSchema = pgTable("user_oauth_credentials", {
 export type UserEntity = typeof UserSchema.$inferSelect;
 export type TwitterAccountEntity = typeof TwitterAccountSchema.$inferSelect;
 export type TweetEntity = typeof TweetSchema.$inferSelect;
-export type ApiKeyEntity = typeof ApiKeySchema.$inferSelect;
 export type CommunityEntity = typeof CommunitySchema.$inferSelect;
 export type oauthApplicationEntity = typeof oauthApplication.$inferSelect;
 export type oauthAccessTokenEntity = typeof oauthAccessToken.$inferSelect;

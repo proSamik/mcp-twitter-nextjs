@@ -1,0 +1,2 @@
+ALTER TABLE "twitter_account" ADD COLUMN "oauth_credentials_id" uuid;--> statement-breakpoint
+ALTER TABLE "twitter_account" ADD CONSTRAINT "twitter_account_oauth_credentials_id_user_oauth_credentials_id_fk" FOREIGN KEY ("oauth_credentials_id") REFERENCES "public"."user_oauth_credentials"("id") ON DELETE set null ON UPDATE no action;

@@ -11,8 +11,8 @@ import {
   IconCreditCard,
   IconCrown,
   IconGift,
-  IconKey,
   IconUsers,
+  IconKey,
 } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -36,8 +36,8 @@ export function AppSidebar({
       | "profile"
       | "settings"
       | "subscription"
-      | "api-keys"
-      | "communities",
+      | "communities"
+      | "oauth-setup",
   ) => void;
   userTier?: UserTier;
 }) {
@@ -131,8 +131,8 @@ export function AppSidebar({
       ),
     },
     {
-      label: "API Keys",
-      href: "/api-keys",
+      label: "OAuth Setup",
+      href: "/oauth-user-setup",
       icon: <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
     },
     {
@@ -204,6 +204,8 @@ export function AppSidebar({
                           handleSignOut();
                         } else if (isSubscription) {
                           handleSubscriptionManagement();
+                        } else if (link.label === "OAuth Setup") {
+                          onNavigate("oauth-setup");
                         } else {
                           const pageName = link.label
                             .toLowerCase()
@@ -212,7 +214,6 @@ export function AppSidebar({
                             | "profile"
                             | "settings"
                             | "subscription"
-                            | "api-keys"
                             | "communities";
                           onNavigate(pageName);
                         }
