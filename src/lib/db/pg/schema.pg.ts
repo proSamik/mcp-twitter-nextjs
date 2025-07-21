@@ -88,6 +88,10 @@ export const TwitterAccountSchema = pgTable("twitter_account", {
   accessTokenExpiresAt: timestamp("access_token_expires_at", {
     withTimezone: true,
   }),
+  oauthCredentialsId: uuid("oauth_credentials_id").references(
+    () => UserOAuthCredentialsSchema.id,
+    { onDelete: "set null" },
+  ),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

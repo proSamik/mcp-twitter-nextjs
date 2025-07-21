@@ -152,10 +152,13 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Handle successful checkout
+  // Handle URL parameters (checkout success, Twitter connection results)
   useEffect(() => {
     const checkoutSuccess = searchParams.get("checkout_success");
     const checkoutId = searchParams.get("checkout_id");
+    const twitterConnected = searchParams.get("twitter_connected");
+    const twitterAccount = searchParams.get("account");
+    const twitterError = searchParams.get("twitter_error");
 
     if (checkoutSuccess === "true" && checkoutId && session?.user) {
       // Show success message
@@ -171,6 +174,53 @@ function DashboardContent() {
       url.searchParams.delete("checkout_success");
       url.searchParams.delete("checkout_id");
       url.searchParams.delete("customer_session_token");
+      router.replace(url.pathname);
+    }
+
+    // Handle Twitter connection success
+    if (twitterConnected === "true") {
+      const accountName = twitterAccount
+        ? decodeURIComponent(twitterAccount)
+        : "account";
+      toast.success(
+        `🎉 Twitter account @${accountName} connected successfully!`,
+      );
+
+      // Clean up URL parameters
+      const url = new URL(window.location.href);
+      url.searchParams.delete("twitter_connected");
+      url.searchParams.delete("account");
+      router.replace(url.pathname);
+    }
+
+    // Handle Twitter connection errors
+    if (twitterError) {
+      const errorMessage = decodeURIComponent(twitterError);
+      toast.error(`Twitter connection failed: ${errorMessage}`);
+
+      // Show additional guidance for OAuth credential errors
+      if (
+        errorMessage.toLowerCase().includes("client") ||
+        errorMessage.toLowerCase().includes("credential") ||
+        errorMessage.toLowerCase().includes("unauthorized")
+      ) {
+        setTimeout(() => {
+          toast.info(
+            "💡 Check your OAuth credentials in Settings → OAuth Setup",
+            {
+              duration: 6000,
+              action: {
+                label: "Go to OAuth Setup",
+                onClick: () => router.push("/oauth-user-setup"),
+              },
+            },
+          );
+        }, 2000);
+      }
+
+      // Clean up URL parameters
+      const url = new URL(window.location.href);
+      url.searchParams.delete("twitter_error");
       router.replace(url.pathname);
     }
   }, [searchParams, session, router, refetch]);

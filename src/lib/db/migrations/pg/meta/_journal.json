@@ -64,6 +64,13 @@
       "when": 1753093529857,
       "tag": "0008_lean_captain_universe",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1753098955064,
+      "tag": "0009_robust_pride",
+      "breakpoints": true
     }
   ]
 }

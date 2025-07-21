@@ -12,6 +12,7 @@ import {
   IconCrown,
   IconGift,
   IconUsers,
+  IconKey,
 } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,8 @@ export function AppSidebar({
       | "settings"
       | "subscription"
       | "api-keys"
-      | "communities",
+      | "communities"
+      | "oauth-setup",
   ) => void;
   userTier?: UserTier;
 }) {
@@ -130,6 +132,11 @@ export function AppSidebar({
       ),
     },
     {
+      label: "OAuth Setup",
+      href: "#",
+      icon: <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
+    },
+    {
       label: "Communities",
       href: "/communities",
       icon: <IconUsers className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
@@ -198,6 +205,8 @@ export function AppSidebar({
                           handleSignOut();
                         } else if (isSubscription) {
                           handleSubscriptionManagement();
+                        } else if (link.label === "OAuth Setup") {
+                          onNavigate("oauth-setup");
                         } else {
                           const pageName = link.label
                             .toLowerCase()

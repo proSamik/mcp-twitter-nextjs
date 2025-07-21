@@ -11,8 +11,9 @@ import {
 import { Button } from "ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "ui/avatar";
 import { Badge } from "ui/badge";
-import { Twitter, Plus, Trash2, ExternalLink } from "lucide-react";
+import { Twitter, Plus, Trash2, ExternalLink, Settings } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface TwitterAccount {
   id: string;
@@ -28,10 +29,29 @@ export function ConnectedAccounts() {
   const [accounts, setAccounts] = useState<TwitterAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [hasOAuthCredentials, setHasOAuthCredentials] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     fetchAccounts();
+    checkOAuthCredentials();
   }, []);
+
+  const checkOAuthCredentials = async () => {
+    try {
+      const response = await fetch("/api/oauth/credentials");
+      if (response.ok) {
+        const data = await response.json();
+        const twitterCredentials = data.credentials?.find(
+          (cred: any) => cred.provider === "twitter",
+        );
+        setHasOAuthCredentials(!!twitterCredentials);
+      }
+    } catch (error) {
+      console.error("Error checking OAuth credentials:", error);
+      setHasOAuthCredentials(false);
+    }
+  };
 
   const fetchAccounts = async () => {
     try {
@@ -52,6 +72,13 @@ export function ConnectedAccounts() {
   };
 
   const handleConnectAccount = async () => {
+    // Always require OAuth credentials - no environment variable fallback
+    if (!hasOAuthCredentials) {
+      toast.error("Please set up your Twitter OAuth credentials first");
+      router.push("/oauth-user-setup");
+      return;
+    }
+
     try {
       setConnecting(true);
 
@@ -152,7 +179,7 @@ export function ConnectedAccounts() {
                 <Button
                   onClick={handleConnectAccount}
                   disabled={connecting}
-                  className="bg-[#1DA1F2] hover:bg-[#1a91da] text-white"
+                  className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   {connecting ? "Connecting..." : "Connect Twitter Account"}
@@ -229,6 +256,35 @@ export function ConnectedAccounts() {
           </div>
         </CardContent>
       </Card>
+
+      {!hasOAuthCredentials && (
+        <Card className="border-destructive/50 bg-destructive/10 dark:bg-destructive/5">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Settings className="h-5 w-5 text-destructive mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-destructive-foreground mb-1">
+                  OAuth Setup Required
+                </h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  {accounts.length > 0
+                    ? "Your existing accounts were connected with environment credentials and are now invalid. Please set up your own Twitter OAuth credentials to reconnect."
+                    : "To connect Twitter accounts, you must provide your own Twitter OAuth credentials."}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push("/oauth-user-setup")}
+                  className="border-destructive text-destructive hover:bg-destructive/10"
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Setup OAuth Credentials
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
