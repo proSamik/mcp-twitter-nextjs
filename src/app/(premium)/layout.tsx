@@ -95,8 +95,8 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
     | "profile"
     | "settings"
     | "subscription"
-    | "api-keys"
     | "communities"
+    | "oauth-setup"
   >("dashboard");
 
   // Redirect to sign-in if not authenticated
@@ -112,8 +112,8 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
       | "profile"
       | "settings"
       | "subscription"
-      | "api-keys"
-      | "communities",
+      | "communities"
+      | "oauth-setup",
   ) => {
     setCurrentPage(page);
   };
