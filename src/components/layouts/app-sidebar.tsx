@@ -36,7 +36,6 @@ export function AppSidebar({
       | "profile"
       | "settings"
       | "subscription"
-      | "api-keys"
       | "communities"
       | "oauth-setup",
   ) => void;
@@ -133,7 +132,7 @@ export function AppSidebar({
     },
     {
       label: "OAuth Setup",
-      href: "#",
+      href: "/oauth-user-setup",
       icon: <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
     },
     {
@@ -215,7 +214,6 @@ export function AppSidebar({
                             | "profile"
                             | "settings"
                             | "subscription"
-                            | "api-keys"
                             | "communities";
                           onNavigate(pageName);
                         }

@@ -25,6 +25,7 @@
 - **Real-time Synchronization** - WebSocket support for live updates across all clients
 
 ### 🐦 Advanced Twitter Management
+- **User OAuth Credentials** - Users provide their own Twitter Developer credentials for enhanced security
 - **Multi-Account Support** - Connect and manage multiple Twitter/X accounts from one dashboard
 - **Smart Composer** - Character counting, hashtag extraction, and mention suggestions
 - **Thread Creation** - Build and schedule complex tweet threads with ease
@@ -39,9 +40,11 @@
 
 ### 🔐 Enterprise Security
 - **OAuth 2.0 MCP Server** - Industry-standard authentication for Claude Desktop
+- **User OAuth Credentials** - Encrypted storage of user-provided Twitter credentials
 - **API Key Management** - Secure API keys with scoped permissions and rotation
 - **Rate Limiting** - Intelligent rate limiting to respect Twitter API limits
 - **Session Management** - Secure 7-day sessions with automatic refresh
+- **Credential Encryption** - AES-256-CBC encryption for Twitter client secrets
 
 ## 🏗️ Tech Stack
 
@@ -118,11 +121,9 @@ POSTGRES_URL=postgres://postgres:password@localhost:5432/mcp_twitter
 POSTGRES_URL=postgresql://username:password@your-db.neon.tech/db?sslmode=require
 ```
 
-#### 🐦 Twitter Integration (Required)
-```env
-TWITTER_CLIENT_ID=your_twitter_client_id
-TWITTER_CLIENT_SECRET=your_twitter_client_secret
-```
+#### 🐦 Twitter Integration (User-Provided)
+Users now provide their own Twitter OAuth credentials through the OAuth Setup page instead of environment variables.
+No Twitter environment variables are required - users bring their own developer credentials for enhanced security.
 
 #### ⏰ Upstash Services (Required)
 ```env
@@ -173,6 +174,41 @@ pnpm dev:turbo
 
 # Open http://localhost:3000
 ```
+
+## 🐦 Twitter OAuth Setup
+
+### User-Provided Credentials
+This platform uses user-provided OAuth credentials instead of environment variables for enhanced security and user control.
+
+### Setup Process
+
+#### 1. Access OAuth Setup
+- Navigate to Settings → OAuth Setup in the application
+- Or visit `/oauth-user-setup` directly
+
+#### 2. Create Twitter Developer Account
+- Visit [Twitter Developer Portal](https://developer.twitter.com/en/portal/dashboard)
+- Create a developer account if you don't have one
+
+#### 3. Create Twitter App
+- Click "Create App" in the Developer Portal
+- Fill out required information about your application
+
+#### 4. Configure OAuth 2.0
+- In your app settings, enable OAuth 2.0
+- Set the redirect URI to: `http://localhost:3000/api/auth/twitter/callback` (or your domain)
+- Copy your Client ID and Client Secret
+
+#### 5. Save Credentials
+- Enter your Client ID and Client Secret in the OAuth Setup page
+- Credentials are automatically encrypted and stored securely
+- The system automatically tests your credentials by initiating a Twitter connection
+
+### Features
+- **Encrypted Storage**: Client secrets encrypted using AES-256-CBC
+- **Automatic Testing**: Credentials verified through actual OAuth flows
+- **Error Handling**: Clear error messages with actionable guidance
+- **Account Isolation**: Each user's Twitter accounts linked to their OAuth credentials
 
 ## 🔐 MCP Integration Guide
 
@@ -364,17 +400,17 @@ mcp-twitter-nextjs/
 ├── 📁 src/
 │   ├── 📁 app/                 # Next.js App Router
 │   │   ├── 📁 (auth)/         # Authentication pages
-│   │   ├── 📁 (premium)/      # Protected features
+│   │   ├── 📁 (premium)/      # Protected features + OAuth setup
 │   │   ├── 📁 (psec)/         # Secure routes
-│   │   └── 📁 api/            # API endpoints
+│   │   └── 📁 api/            # API endpoints + OAuth management
 │   ├── 📁 components/         # React components
 │   │   ├── 📁 ui/             # Reusable components
 │   │   ├── 📁 twitter/        # Twitter components
 │   │   └── 📁 layouts/        # Layout components
 │   ├── 📁 lib/                # Core libraries
-│   │   ├── 📁 auth/           # Authentication
-│   │   ├── 📁 db/             # Database operations
-│   │   ├── 📁 twitter/        # Twitter API
+│   │   ├── 📁 auth/           # Authentication + OAuth credentials
+│   │   ├── 📁 db/             # Database operations + repositories
+│   │   ├── 📁 twitter/        # Twitter API with user credentials
 │   │   └── 📁 upstash/        # Redis & QStash
 │   ├── 📁 hooks/              # Custom hooks
 │   └── 📁 types/              # TypeScript types
@@ -395,15 +431,23 @@ POST /api/auth/sign-out        # Sign out
 GET  /api/auth/session         # Get session
 ```
 
+### OAuth Credentials Management
+```
+GET  /api/oauth/credentials       # Get user's OAuth credentials
+POST /api/oauth/credentials       # Save encrypted OAuth credentials
+DELETE /api/oauth/credentials     # Delete OAuth credentials
+```
+
 ### Twitter Management
 ```
-GET  /api/twitter/accounts     # List connected accounts
-POST /api/twitter/accounts     # Connect account
-GET  /api/twitter/tweets       # List tweets
-POST /api/twitter/tweets       # Create tweet
-PUT  /api/twitter/tweets/:id   # Update tweet
-DELETE /api/twitter/tweets/:id # Delete tweet
-POST /api/twitter/schedule     # Schedule tweet
+GET  /api/twitter/accounts        # List connected accounts
+POST /api/twitter/accounts        # Connect account
+GET  /api/twitter/tweets          # List tweets
+POST /api/twitter/tweets          # Create tweet
+PUT  /api/twitter/tweets/:id      # Update tweet
+DELETE /api/twitter/tweets/:id    # Delete tweet
+POST /api/twitter/schedule        # Schedule tweet
+GET  /api/auth/twitter/callback   # OAuth callback with error handling
 ```
 
 ### MCP Server

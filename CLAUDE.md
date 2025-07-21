@@ -87,7 +87,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **SessionSchema**: Authentication sessions with device tracking
 - **AccountSchema**: OAuth provider accounts
 - **VerificationSchema**: Email verification tokens
-- **TwitterAccountSchema**: Connected Twitter/X accounts with OAuth tokens
+- **UserOAuthCredentialsSchema**: User-provided OAuth credentials (encrypted client secrets)
+- **TwitterAccountSchema**: Connected Twitter/X accounts with OAuth tokens and credentials reference
 - **TweetSchema**: Tweet management (drafts, scheduled, posted) with analytics
 - **TweetThreadSchema**: Thread management for multi-tweet sequences
 - **ApiKeySchema**: API keys for MCP authentication
@@ -95,10 +96,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Authentication Flow (Better Auth)
 - Email/password authentication with 7-day sessions
 - Google OAuth with automatic account linking
-- Twitter OAuth 2.0 for connecting Twitter/X accounts
-- Multi-account Twitter management per user
+- User-provided Twitter OAuth credentials (no environment variables required)
+- Multi-account Twitter management per user with credential isolation
 - Protected route groups for premium features
 - User preferences stored in database JSON column
+- OAuth credential encryption using AES-256-CBC with BETTER_AUTH_SECRET
 
 ### Payment Integration (Polar.sh)
 - One-time payments for lifetime access
@@ -162,43 +164,51 @@ Comprehensive Twitter/X management platform with multi-account support and AI in
 - **MCP Integration**: Claude AI integration for content optimization
 
 ### Database Schema
-- **TwitterAccountSchema**: Connected Twitter accounts with OAuth tokens and profile data
+- **UserOAuthCredentialsSchema**: User-provided OAuth credentials with encrypted client secrets
+- **TwitterAccountSchema**: Connected Twitter accounts with OAuth tokens, profile data, and credentials reference
 - **TweetSchema**: Comprehensive tweet management with status tracking (draft, scheduled, posted, failed)
 - **TweetThreadSchema**: Thread management for multi-tweet sequences
 - **ApiKeySchema**: API keys for MCP authentication
 
 ### API Endpoints
+- `GET/POST/DELETE /api/oauth/credentials` - Manage user OAuth credentials
 - `GET/POST /api/twitter/accounts` - Manage connected Twitter accounts
 - `POST /api/twitter/post` - Post tweets immediately
 - `POST/DELETE /api/twitter/schedule` - Schedule and cancel tweets
 - `POST /api/auth/twitter/connect` - Initiate Twitter OAuth connection
+- `GET /api/auth/twitter/callback` - Twitter OAuth callback with error handling
 - `POST /api/mcp` - Claude MCP server for AI-powered features
 - `POST /api/webhooks/qstash/tweet` - QStash webhook for scheduled tweets
 
 ### Components Structure
 - **ConnectedAccounts** (`src/components/twitter/connected-accounts.tsx`):
   - Multi-account display with profile information
-  - Connect/disconnect functionality
-  - Real-time account status
+  - Connect/disconnect functionality with user OAuth credentials
+  - Real-time account status and OAuth setup warnings
+- **OAuthUserSetupPage** (`src/app/(premium)/oauth-user-setup/page.tsx`):
+  - User OAuth credentials setup with Twitter Developer Portal instructions
+  - Encrypted credential storage and automatic connection testing
+  - Error handling for OAuth callback failures
 - **TweetComposer** (`src/components/twitter/tweet-composer.tsx`):
   - Rich text composer with character counting
   - Hashtag and mention extraction
   - Schedule functionality with date/time picker
   - Draft saving capabilities
 - **AppSidebar** (`src/components/layouts/app-sidebar.tsx`):
-  - Navigation with API Keys page integration
+  - Navigation with API Keys and OAuth Setup page integration
   - Theme-aware Twitter branding
 
 ### Twitter API Integration
 - **TwitterClient** (`src/lib/twitter/client.ts`):
-  - OAuth 2.0 and OAuth 1.0a support
+  - OAuth 2.0 and OAuth 1.0a support with user-provided credentials
   - Tweet posting with media upload
   - Thread creation and management
   - User profile and analytics access
-- **TwitterAuth** (`src/lib/twitter/auth.ts`):
-  - OAuth flow management
-  - Token storage and refresh
-  - Multi-account session handling
+- **TwitterAuthManager** (`src/lib/auth/twitter-oauth.ts`):
+  - User OAuth credentials management (no environment variables)
+  - OAuth flow with callback error handling
+  - Token storage and refresh with credential association
+  - Multi-account session handling per user credentials
 
 ### Upstash Integration
 - **Redis Caching** (`src/lib/upstash/redis.ts`):
@@ -262,40 +272,54 @@ For clients that don't support OAuth, API key authentication is available via th
 - `socket.io` - WebSocket real-time updates
 - `better-auth` - Authentication with Twitter OAuth
 
-## New Files Created During Transformation
+## User OAuth Credentials System
 
-### Core Twitter Integration
-- **`src/lib/twitter/client.ts`** - Comprehensive Twitter API client with OAuth 2.0/1.0a support
-- **`src/lib/twitter/auth.ts`** - Twitter OAuth flow management and token handling
-- **`src/lib/twitter/types.ts`** - TypeScript types for Twitter API responses
+### Overview
+The platform now supports user-provided OAuth credentials instead of requiring environment variables. Users bring their own Twitter Developer credentials for enhanced security and control.
 
-### Upstash Integration
-- **`src/lib/upstash/redis.ts`** - Redis caching utilities for Twitter data and rate limiting
-- **`src/lib/upstash/qstash.ts`** - QStash scheduling for tweet automation and webhooks
+### Key Features
+- **No Environment Variables Required**: Users provide their own Twitter OAuth credentials
+- **Encrypted Storage**: Client secrets encrypted using AES-256-CBC with BETTER_AUTH_SECRET
+- **Automatic Testing**: Credentials verified through actual OAuth flows
+- **Error Handling**: Comprehensive OAuth callback error handling and user guidance
+- **Account Isolation**: Each user's Twitter accounts linked to their OAuth credentials
 
-### UI Components
-- **`src/components/twitter/connected-accounts.tsx`** - Multi-account Twitter management component
-- **`src/components/twitter/tweet-composer.tsx`** - Full-featured tweet composer with scheduling
+### Core Files
+- **`src/lib/auth/oauth-credentials.ts`** - OAuth credential encryption, decryption, and validation
+- **`src/lib/db/pg/repositories/user-oauth-credentials.ts`** - OAuth credentials database operations
+- **`src/app/(premium)/oauth-user-setup/page.tsx`** - OAuth setup page with Twitter Developer instructions
+- **`src/app/api/oauth/credentials/route.ts`** - API endpoints for OAuth credentials management
+- **`src/lib/auth/twitter-oauth.ts`** - Updated TwitterAuthManager for user credentials
+- **`src/app/api/auth/twitter/callback/route.ts`** - Enhanced callback with error handling
 
-### API Routes
-- **`src/app/api/twitter/accounts/route.ts`** - Twitter account management endpoints
-- **`src/app/api/twitter/post/route.ts`** - Immediate tweet posting
-- **`src/app/api/twitter/schedule/route.ts`** - Tweet scheduling and cancellation
-- **`src/app/api/auth/twitter/connect/route.ts`** - Twitter OAuth connection initiation
-- **`src/app/api/auth/twitter/callback/route.ts`** - Twitter OAuth callback handling
-- **`src/app/api/webhooks/qstash/tweet/route.ts`** - QStash webhook for scheduled tweets
+### Database Schema Updates
+- **`UserOAuthCredentialsSchema`** - Stores encrypted OAuth credentials per user
+- **`TwitterAccountSchema.oauthCredentialsId`** - Links Twitter accounts to user credentials
+- **Migration 0009** - Adds oauth_credentials_id column to twitter_account table
 
-### Database Repositories
-- **`src/lib/db/repositories/twitter-accounts.ts`** - Twitter account data operations
-- **`src/lib/db/repositories/tweets.ts`** - Tweet CRUD operations and queries
+### API Endpoints
+- `POST /api/oauth/credentials` - Save encrypted OAuth credentials
+- `GET /api/oauth/credentials` - Retrieve user's OAuth credentials (without secrets)
+- `DELETE /api/oauth/credentials` - Delete OAuth credentials
+- `GET /api/auth/twitter/callback` - Enhanced callback with credential-specific error handling
 
-### WebSocket Integration
-- **`src/lib/websocket/server.ts`** - Real-time broadcasting for tweet updates
-- **`src/lib/websocket/client.ts`** - Client-side WebSocket management
+### Security Features
+- Client secrets encrypted with AES-256-CBC using BETTER_AUTH_SECRET as encryption key
+- Format validation for Twitter OAuth credentials
+- Server-side only credential operations (no browser exposure)
+- Automatic invalidation of old Twitter accounts when new credentials are set
 
-### Additional Files
-- **`.env.example`** - Updated with all Twitter API, Upstash, and MCP environment variables
-- **`src/app/(psec)/api-keys/page.tsx`** - API keys management page for MCP integration
+### User Experience
+- Step-by-step Twitter Developer Portal setup instructions
+- Copy-to-clipboard redirect URI functionality
+- Automatic credential testing via OAuth flow initiation
+- Clear error messages with actionable guidance for OAuth failures
+- Theme-consistent UI components using CSS custom properties
+
+## Legacy Files (Twitter Environment Variables)
+The following pattern is no longer used as users now provide their own OAuth credentials:
+- Environment variables: `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET` 
+- System-wide Twitter credentials in favor of per-user credentials
 
 ## Package Manager
 - Uses pnpm as primary package manager
