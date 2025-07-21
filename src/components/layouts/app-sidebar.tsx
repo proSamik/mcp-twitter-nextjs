@@ -11,7 +11,6 @@ import {
   IconCreditCard,
   IconCrown,
   IconGift,
-  IconKey,
   IconUsers,
 } from "@tabler/icons-react";
 import { motion } from "framer-motion";
@@ -129,11 +128,6 @@ export function AppSidebar({
       icon: (
         <IconSettings className="h-5 w-5 shrink-0 text-sidebar-foreground" />
       ),
-    },
-    {
-      label: "API Keys",
-      href: "/api-keys",
-      icon: <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
     },
     {
       label: "Communities",

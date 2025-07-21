@@ -10,8 +10,6 @@ import { Profile } from "@/components/profile";
 import { SubscriptionManagement } from "@/components/subscription-management";
 import { NotificationManager } from "@/components/notification-manager";
 
-import { ApiKeyManager } from "@/components/api-keys/api-key-manager";
-
 type UserTier = "free" | "lifetime";
 
 /**
@@ -136,8 +134,6 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
             onBack={() => setCurrentPage("dashboard")}
           />
         );
-      case "api-keys":
-        return <ApiKeyManager />;
       case "communities":
         return (
           <div className="space-y-6">

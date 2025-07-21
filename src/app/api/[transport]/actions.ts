@@ -1,8 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth/server";
 import { pgDb as db } from "@/lib/db/pg/db.pg";
 import { TweetSchema, TwitterAccountSchema } from "@/lib/db/pg/schema.pg";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte, lte, like, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   broadcastTweetCreated,
@@ -11,22 +9,126 @@ import {
 } from "@/lib/websocket/server";
 import { scheduleTweetInternal } from "@/lib/twitter/schedule-tweet";
 import { postTweetInternal } from "@/lib/twitter/post-tweet";
+import { CommunitySchema } from "@/lib/db/pg/schema.pg";
+import { z } from "zod";
+
+// Zod schemas for argument validation
+const listTweetsSchema = z.object({
+  status: z.enum(["draft", "scheduled", "posted", "failed"]).optional(),
+  limit: z.number().optional(),
+  page: z.number().optional(),
+  fromDate: z.string().optional(),
+  toDate: z.string().optional(),
+  text: z.string().optional(),
+});
+
+const createTweetSchema = z.object({
+  content: z.string().optional(),
+  tweetType: z.enum(["single", "thread"]).optional(),
+  status: z.enum(["draft", "posted"]).optional(),
+  tags: z.array(z.string()).optional(),
+  twitterAccountId: z.string().optional(),
+  communityId: z.string().optional(),
+  isThread: z.boolean().optional(),
+  threadTweets: z.array(z.string()).optional(),
+  threadData: z
+    .array(
+      z.object({
+        content: z.string(),
+        mediaIds: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
+  mediaIds: z.array(z.string()).optional(),
+  scheduledFor: z.string().optional(),
+});
+
+const scheduleTweetSchema = z.object({
+  nanoId: z.string(),
+  scheduledFor: z.string(),
+  timezone: z.string().optional(),
+});
+
+const deleteTweetSchema = z.object({
+  nanoId: z.string(),
+});
+
+const postTweetSchema = z.object({
+  nanoId: z.string(),
+});
+
+const rescheduleTweetSchema = z.object({
+  nanoId: z.string(),
+  newScheduledFor: z.string(),
+  timezone: z.string().optional(),
+});
+
+const convertDraftToScheduledSchema = z.object({
+  nanoId: z.string(),
+  scheduledFor: z.string(),
+  timezone: z.string().optional(),
+});
+
+const addCommunitySchema = z.object({
+  communityId: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+});
 
 /**
  * List all tweets for the authenticated user.
+ * Now validates args using Zod before querying the database.
  */
-async function listTweets(
-  args: { status?: string; limit?: number },
+export async function listTweets(
+  args: {
+    status?: string;
+    limit?: number;
+    page?: number;
+    fromDate?: string;
+    toDate?: string;
+    text?: string;
+  },
   userId: string,
 ) {
+  // Validate input
+  const parsed = listTweetsSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   try {
-    const { status, limit = 50 } = args;
-    // Build where condition
+    const { status, limit = 10, page = 1, fromDate, toDate, text } = args;
+    const offset = (page - 1) * limit;
     const whereConditions = [eq(TweetSchema.userId, userId)];
     if (status) {
       whereConditions.push(eq(TweetSchema.status, status));
     }
-
+    if (fromDate) {
+      const fromDateTime = new Date(fromDate);
+      if (!isNaN(fromDateTime.getTime())) {
+        whereConditions.push(gte(TweetSchema.createdAt, fromDateTime));
+      }
+    }
+    if (toDate) {
+      const toDateTime = new Date(toDate);
+      if (!isNaN(toDateTime.getTime())) {
+        toDateTime.setHours(23, 59, 59, 999);
+        whereConditions.push(lte(TweetSchema.createdAt, toDateTime));
+      }
+    }
+    if (text) {
+      whereConditions.push(
+        or(
+          like(TweetSchema.content, `%${text}%`),
+          sql`${TweetSchema.threadTweets}::text ILIKE ${`%${text}%`}`,
+        )!,
+      );
+    }
     const tweets = await db
       .select({
         nanoId: TweetSchema.nanoId,
@@ -49,15 +151,16 @@ async function listTweets(
           : whereConditions[0],
       )
       .orderBy(TweetSchema.createdAt)
-      .limit(limit);
-
+      .limit(limit)
+      .offset(offset);
     return {
       content: [
         {
           type: "text",
-          text: `Found ${tweets.length} tweets${status ? ` with status "${status}"` : ""}:\n\n${JSON.stringify(tweets, null, 2)}`,
+          text: `Found ${tweets.length} tweets${status ? ` with status \"${status}\"` : ""}${text ? ` matching \"${text}\"` : ""} (page ${page}):\n\n${JSON.stringify(tweets, null, 2)}`,
         },
       ],
+      tweets,
     };
   } catch (error) {
     return {
@@ -74,18 +177,34 @@ async function listTweets(
 
 /**
  * Create a new tweet/draft for the authenticated user.
+ * Now validates args using Zod before querying the database.
  */
-async function createTweet(args: any, userId: string) {
+export async function createTweet(args: any, userId: string) {
+  // Validate input
+  const parsed = createTweetSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   try {
     const {
       content,
-      tweetType = "draft",
       status = "draft",
       scheduledFor,
-      hashtags = [],
-      mentions = [],
       tags = [],
       twitterAccountId,
+      communityId,
+      // Thread support - supports both old and new formats
+      threadTweets, // Legacy format: string[]
+      threadData, // New format: { content: string, mediaIds: string[] }[]
+      isThread = false,
+      // Media support (note: media files not uploaded through MCP, only references)
+      mediaIds = [],
     } = args;
 
     // Validate Twitter account belongs to user
@@ -127,17 +246,53 @@ async function createTweet(args: any, userId: string) {
       accountId = account.id;
     }
 
+    // Determine if this is a thread
+    const finalIsThread =
+      isThread || threadTweets?.length > 1 || threadData?.length > 1;
+    const finalTweetType = finalIsThread ? "thread" : "single";
+
+    // Process content and thread data
+    let finalContent: string;
+    let processedThreadTweets: { content: string; mediaIds: string[] }[] = [];
+
+    if (finalIsThread) {
+      if (threadData && threadData.length > 0) {
+        // Use new threadData format
+        processedThreadTweets = threadData;
+        finalContent = threadData
+          .map((tweet: any) => tweet.content)
+          .join("\n\n");
+      } else if (threadTweets && threadTweets.length > 0) {
+        // Convert legacy threadTweets format
+        processedThreadTweets = threadTweets.map((tweetContent: string) => ({
+          content: tweetContent,
+          mediaIds: [] as string[],
+        }));
+        finalContent = threadTweets.join("\n\n");
+      } else {
+        throw new Error("Thread content is required for thread tweets");
+      }
+    } else {
+      finalContent = content;
+      if (mediaIds && mediaIds.length > 0) {
+        processedThreadTweets = [{ content: finalContent, mediaIds }];
+      }
+    }
+
     const [dbTweet] = await db
       .insert(TweetSchema)
       .values({
         nanoId: nanoid(8),
-        content,
-        tweetType,
+        content: finalContent,
+        tweetType: finalTweetType,
         status,
         scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
-        hashtags,
-        mentions,
         tags,
+        mediaUrls: finalIsThread
+          ? processedThreadTweets.flatMap((t) => t.mediaIds || [])
+          : mediaIds,
+        threadTweets: finalIsThread ? processedThreadTweets : [],
+        communityId: communityId || null,
         twitterAccountId: accountId,
         userId,
       })
@@ -151,6 +306,9 @@ async function createTweet(args: any, userId: string) {
         hashtags: TweetSchema.hashtags,
         mentions: TweetSchema.mentions,
         tags: TweetSchema.tags,
+        mediaUrls: TweetSchema.mediaUrls,
+        threadTweets: TweetSchema.threadTweets,
+        communityId: TweetSchema.communityId,
         userId: TweetSchema.userId,
         createdAt: TweetSchema.createdAt,
         updatedAt: TweetSchema.updatedAt,
@@ -176,7 +334,7 @@ async function createTweet(args: any, userId: string) {
       content: [
         {
           type: "text",
-          text: `Tweet created successfully!\n\n${JSON.stringify(publicTweet, null, 2)}`,
+          text: `${finalIsThread ? "Thread" : "Tweet"} created successfully!\n\nType: ${finalTweetType}\nStatus: ${status}\n${finalIsThread ? `Thread tweets: ${processedThreadTweets.length}\n` : ""}${mediaIds?.length > 0 ? `Media files: ${mediaIds.length}\n` : ""}\n${JSON.stringify(publicTweet, null, 2)}`,
         },
       ],
     };
@@ -195,8 +353,20 @@ async function createTweet(args: any, userId: string) {
 
 /**
  * Schedule a tweet for posting at a specific time using QStash.
+ * Now validates args using Zod before querying the database.
  */
-async function scheduleTweet(args: any, userId: string) {
+export async function scheduleTweet(args: any, userId: string) {
+  // Validate input
+  const parsed = scheduleTweetSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   try {
     const { nanoId, scheduledFor, timezone = "UTC" } = args;
 
@@ -272,7 +442,14 @@ async function scheduleTweet(args: any, userId: string) {
       mediaIds: tweet.mediaUrls || undefined,
       isThread: tweet.tweetType === "thread",
       threadTweets:
-        tweet.tweetType === "thread" ? tweet.content.split("\n\n") : undefined,
+        tweet.tweetType === "thread" &&
+        (!tweet.threadTweets || tweet.threadTweets.length === 0)
+          ? tweet.content.split("\n\n")
+          : undefined,
+      threadData:
+        tweet.threadTweets && tweet.threadTweets.length > 0
+          ? tweet.threadTweets
+          : undefined,
       delaySeconds, // Pass calculated delay to QStash
     });
 
@@ -328,8 +505,20 @@ async function scheduleTweet(args: any, userId: string) {
 
 /**
  * Delete a tweet by nanoId for the authenticated user.
+ * Now validates args using Zod before querying the database.
  */
-async function deleteTweet(args: any, userId: string) {
+export async function deleteTweet(args: any, userId: string) {
+  // Validate input
+  const parsed = deleteTweetSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   try {
     const { nanoId } = args;
 
@@ -396,8 +585,20 @@ async function deleteTweet(args: any, userId: string) {
 
 /**
  * Convert a draft tweet to posted (immediately post to Twitter)
+ * Now validates args using Zod before querying the database.
  */
-async function postTweet(args: any, userId: string) {
+export async function postTweet(args: any, userId: string) {
+  // Validate input
+  const parsed = postTweetSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   try {
     const { nanoId } = args;
 
@@ -430,8 +631,13 @@ async function postTweet(args: any, userId: string) {
         mediaIds: tweet.mediaUrls || undefined,
         isThread: tweet.tweetType === "thread",
         threadTweets:
-          tweet.tweetType === "thread"
+          tweet.tweetType === "thread" &&
+          (!tweet.threadTweets || tweet.threadTweets.length === 0)
             ? tweet.content.split("\n\n")
+            : undefined,
+        threadData:
+          tweet.threadTweets && tweet.threadTweets.length > 0
+            ? tweet.threadTweets
             : undefined,
         userId,
       });
@@ -490,8 +696,20 @@ async function postTweet(args: any, userId: string) {
 
 /**
  * Reschedule an existing scheduled tweet to a new time
+ * Now validates args using Zod before querying the database.
  */
-async function rescheduleTweet(args: any, userId: string) {
+export async function rescheduleTweet(args: any, userId: string) {
+  // Validate input
+  const parsed = rescheduleTweetSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   try {
     const { nanoId, newScheduledFor, timezone = "UTC" } = args;
 
@@ -578,7 +796,14 @@ async function rescheduleTweet(args: any, userId: string) {
       mediaIds: tweet.mediaUrls || undefined,
       isThread: tweet.tweetType === "thread",
       threadTweets:
-        tweet.tweetType === "thread" ? tweet.content.split("\n\n") : undefined,
+        tweet.tweetType === "thread" &&
+        (!tweet.threadTweets || tweet.threadTweets.length === 0)
+          ? tweet.content.split("\n\n")
+          : undefined,
+      threadData:
+        tweet.threadTweets && tweet.threadTweets.length > 0
+          ? tweet.threadTweets
+          : undefined,
     });
 
     if (!scheduleResult.success) {
@@ -625,8 +850,20 @@ async function rescheduleTweet(args: any, userId: string) {
 
 /**
  * Convert a draft to scheduled tweet
+ * Now validates args using Zod before querying the database.
  */
-async function convertDraftToScheduled(args: any, userId: string) {
+export async function convertDraftToScheduled(args: any, userId: string) {
+  // Validate input
+  const parsed = convertDraftToScheduledSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   try {
     const { nanoId, scheduledFor, timezone = "UTC" } = args;
 
@@ -701,7 +938,14 @@ async function convertDraftToScheduled(args: any, userId: string) {
       mediaIds: tweet.mediaUrls || undefined,
       isThread: tweet.tweetType === "thread",
       threadTweets:
-        tweet.tweetType === "thread" ? tweet.content.split("\n\n") : undefined,
+        tweet.tweetType === "thread" &&
+        (!tweet.threadTweets || tweet.threadTweets.length === 0)
+          ? tweet.content.split("\n\n")
+          : undefined,
+      threadData:
+        tweet.threadTweets && tweet.threadTweets.length > 0
+          ? tweet.threadTweets
+          : undefined,
     });
 
     if (!scheduleResult.success) {
@@ -749,443 +993,182 @@ async function convertDraftToScheduled(args: any, userId: string) {
 
 /**
  * Convert a draft to posted tweet (same as postTweet but with different name for clarity)
+ * Now validates args using Zod before querying the database.
  */
-async function convertDraftToPosted(args: any, userId: string) {
+export async function convertDraftToPosted(args: any, userId: string) {
+  // Validate input
+  const parsed = postTweetSchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
+  }
+  args = parsed.data;
   return await postTweet(args, userId);
 }
 
 /**
- * Authenticate MCP requests using Better Auth session
- * @param request Next.js request object
- * @returns session object or null
+ * List all Twitter accounts for the authenticated user (for MCP selection)
  */
-async function authenticateRequest(request: NextRequest) {
-  const session = await auth.api.getMcpSession({
-    headers: request.headers,
-  });
-  if (!session) {
-    return null;
-  }
-  return session;
-}
+export async function listTwitterAccounts(_args: any, userId: string) {
+  // Fetch all Twitter accounts for the user
+  const accounts = await db
+    .select({
+      id: TwitterAccountSchema.id,
+      username: TwitterAccountSchema.username,
+      displayName: TwitterAccountSchema.displayName,
+      isActive: TwitterAccountSchema.isActive,
+      createdAt: TwitterAccountSchema.createdAt,
+    })
+    .from(TwitterAccountSchema)
+    .where(eq(TwitterAccountSchema.userId, userId));
 
-/**
- * POST handler for direct JSON-RPC requests
- * Handles MCP methods directly without transport layer to avoid compatibility issues.
- */
-export async function POST(request: NextRequest) {
-  try {
-    // Authenticate the request
-    const session = await authenticateRequest(request);
-    if (!session) {
-      return new Response(null, {
-        status: 401,
-      });
-    }
-
-    // Parse the JSON-RPC request
-    const body = await request.json();
-    const { method, params, id } = body;
-
-    // Debug logging
-    console.log(`MCP Request: ${method}`, {
-      method,
-      params,
-      id,
-      headers: Object.fromEntries(request.headers.entries()),
-    });
-
-    // Handle MCP protocol methods directly
-    switch (method) {
-      case "initialize":
-        return NextResponse.json({
-          jsonrpc: "2.0",
-          result: {
-            protocolVersion: params.protocolVersion || "2025-06-18",
-            capabilities: {
-              tools: {},
-              prompts: {},
-              resources: {},
-              logging: {},
-            },
-            serverInfo: {
-              name: "twitter-mcp-server",
-              version: "1.0.0",
-            },
-          },
-          id,
-        });
-
-      case "resources/list":
-        return NextResponse.json({
-          jsonrpc: "2.0",
-          result: {
-            resources: [],
-          },
-          id,
-        });
-
-      case "tools/list":
-        return NextResponse.json({
-          jsonrpc: "2.0",
-          result: {
-            tools: [
-              // list tweets
-              {
-                name: "list_tweets",
-                description:
-                  "🔍 LIST TWEETS: Get all tweets for the authenticated user. Use this to view existing tweets before creating new ones or to check tweet statuses. Essential for managing tweet content.",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    status: {
-                      type: "string",
-                      enum: ["draft", "scheduled", "posted", "failed"],
-                      description: "Filter tweets by status",
-                    },
-                    limit: {
-                      type: "number",
-                      description:
-                        "Maximum number of tweets to return (default: 50)",
-                    },
-                  },
-                  required: [],
-                },
-              },
-              // create tweets
-              {
-                name: "create_tweet",
-                description:
-                  "✍️ CREATE TWEET: Create a new tweet or draft for the authenticated user. Use this to create content that can be posted immediately or saved as a draft for later scheduling. Do NOT use this for scheduling - use convert_draft_to_scheduled instead!",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    content: {
-                      type: "string",
-                      description: "Tweet content",
-                    },
-                    tweetType: {
-                      type: "string",
-                      enum: ["draft", "single", "thread"],
-                      description: "Type of tweet",
-                      default: "draft",
-                    },
-                    status: {
-                      type: "string",
-                      enum: ["draft", "scheduled", "posted"],
-                      description: "Tweet status",
-                      default: "draft",
-                    },
-                    scheduledFor: {
-                      type: "string",
-                      format: "date-time",
-                      description:
-                        "ISO date string for when to post (for scheduled tweets)",
-                    },
-                    hashtags: {
-                      type: "array",
-                      items: { type: "string" },
-                      description: "Hashtags to include",
-                    },
-                    mentions: {
-                      type: "array",
-                      items: { type: "string" },
-                      description: "Usernames to mention",
-                    },
-                    tags: {
-                      type: "array",
-                      items: { type: "string" },
-                      description: "Organizational tags",
-                    },
-                    twitterAccountId: {
-                      type: "string",
-                      description:
-                        "ID of Twitter account to use (optional, uses first active account if not provided)",
-                    },
-                  },
-                  required: ["content"],
-                },
-              },
-              // schedule tweets
-              {
-                name: "schedule_tweet",
-                description:
-                  "⏰ SCHEDULE EXISTING TWEET: Schedule an existing DRAFT tweet for posting at a specific time. Only works with tweets that have status='draft'. Use this to schedule drafts.",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    nanoId: {
-                      type: "string",
-                      description: "Unique nanoId of the tweet to schedule",
-                    },
-                    scheduledFor: {
-                      type: "string",
-                      format: "date-time",
-                      description:
-                        "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
-                    },
-                    timezone: {
-                      type: "string",
-                      description:
-                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-                      default: "UTC",
-                    },
-                  },
-                  required: ["nanoId", "scheduledFor"],
-                },
-              },
-              // delete tweets
-              {
-                name: "delete_tweet",
-                description:
-                  "🗑️ DELETE TWEET: Permanently delete a tweet by nanoId. Works for drafts, scheduled tweets (will cancel QStash scheduling), and posted tweets. Use this to remove unwanted content.",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    nanoId: {
-                      type: "string",
-                      description: "Unique nanoId of the tweet to delete",
-                    },
-                  },
-                  required: ["nanoId"],
-                },
-              },
-              // post tweet
-              {
-                name: "post_tweet",
-                description:
-                  "🚀 POST TWEET NOW: Immediately post a DRAFT tweet to Twitter. Only works with tweets that have status='draft'. Use this to publish content right away.",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    nanoId: {
-                      type: "string",
-                      description: "Unique nanoId of the draft tweet to post",
-                    },
-                  },
-                  required: ["nanoId"],
-                },
-              },
-              // reschedule tweet
-              {
-                name: "reschedule_tweet",
-                description:
-                  "🔄 RESCHEDULE TWEET: Change the scheduled time of an existing SCHEDULED tweet. Only works with tweets that have status='scheduled'. Automatically cancels old QStash scheduling.",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    nanoId: {
-                      type: "string",
-                      description:
-                        "Unique nanoId of the scheduled tweet to reschedule",
-                    },
-                    newScheduledFor: {
-                      type: "string",
-                      format: "date-time",
-                      description:
-                        "New date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
-                    },
-                    timezone: {
-                      type: "string",
-                      description:
-                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-                      default: "UTC",
-                    },
-                  },
-                  required: ["nanoId", "newScheduledFor"],
-                },
-              },
-              // convert draft to scheduled
-              {
-                name: "convert_draft_to_scheduled",
-                description:
-                  "📅 CONVERT DRAFT TO SCHEDULED: Transform a DRAFT tweet into a SCHEDULED tweet for future posting. This is the PREFERRED way to schedule new content - first create a draft, then convert it to scheduled.",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    nanoId: {
-                      type: "string",
-                      description:
-                        "Unique nanoId of the draft tweet to convert",
-                    },
-                    scheduledFor: {
-                      type: "string",
-                      format: "date-time",
-                      description:
-                        "Date string for when to post the tweet (YYYY-MM-DDTHH:MM format for local time)",
-                    },
-                    timezone: {
-                      type: "string",
-                      description:
-                        "User's timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to UTC if not provided.",
-                      default: "UTC",
-                    },
-                  },
-                  required: ["nanoId", "scheduledFor"],
-                },
-              },
-              // convert draft to posted
-              {
-                name: "convert_draft_to_posted",
-                description:
-                  "📢 CONVERT DRAFT TO POSTED: Transform a DRAFT tweet into a POSTED tweet (immediately publish to Twitter). This is the PREFERRED way to post new content - first create a draft, then convert it to posted.",
-                inputSchema: {
-                  type: "object",
-                  properties: {
-                    nanoId: {
-                      type: "string",
-                      description: "Unique nanoId of the draft tweet to post",
-                    },
-                  },
-                  required: ["nanoId"],
-                },
-              },
-            ],
-          },
-          id,
-        });
-
-      case "tools/call":
-        try {
-          const { name: toolName, arguments: toolArgs } = params;
-
-          // Execute tools directly based on their name
-          let result: any;
-          switch (toolName) {
-            case "list_tweets":
-              result = await listTweets(toolArgs, session.userId);
-              break;
-            case "create_tweet":
-              result = await createTweet(toolArgs, session.userId);
-              break;
-            case "schedule_tweet":
-              result = await scheduleTweet(toolArgs, session.userId);
-              break;
-            case "delete_tweet":
-              result = await deleteTweet(toolArgs, session.userId);
-              break;
-            case "post_tweet":
-              result = await postTweet(toolArgs, session.userId);
-              break;
-            case "reschedule_tweet":
-              result = await rescheduleTweet(toolArgs, session.userId);
-              break;
-            case "convert_draft_to_scheduled":
-              result = await convertDraftToScheduled(toolArgs, session.userId);
-              break;
-            case "convert_draft_to_posted":
-              result = await convertDraftToPosted(toolArgs, session.userId);
-              break;
-            default:
-              throw new Error(`Tool ${toolName} not found`);
-          }
-
-          return NextResponse.json({
-            jsonrpc: "2.0",
-            result,
-            id,
-          });
-        } catch (error) {
-          return NextResponse.json({
-            jsonrpc: "2.0",
-            error: {
-              code: -32603,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Tool execution failed",
-            },
-            id,
-          });
-        }
-
-      default:
-        return NextResponse.json({
-          jsonrpc: "2.0",
-          error: {
-            code: -32601,
-            message: `Method ${method} not found`,
-          },
-          id,
-        });
-    }
-  } catch (error) {
-    console.error("MCP POST request error:", error);
-    return NextResponse.json(
+  // Return the list in a user-friendly format
+  return {
+    content: [
       {
-        jsonrpc: "2.0",
-        error: {
-          code: -32603,
-          message: "Internal server error",
-        },
-        id: null,
+        type: "text" as const,
+        text:
+          accounts.length === 0
+            ? "No Twitter accounts connected. Please connect an account first."
+            : `Your Twitter accounts (for selection):\n\n${accounts
+                .map(
+                  (a, i) =>
+                    `${i + 1}. Account ID: ${a.id}\n   Username: @${a.username}\n   Display Name: ${a.displayName}\n   Active: ${a.isActive ? "Yes" : "No"}\n   Created: ${a.createdAt}`,
+                )
+                .join("\n\n")}`,
       },
-      { status: 500 },
-    );
+    ],
+    accounts, // Also return as JSON for programmatic use
+  };
+}
+
+/**
+ * List all communities for the authenticated user.
+ */
+export async function listCommunities(_args: any, userId: string) {
+  try {
+    const communities = await db
+      .select({
+        id: CommunitySchema.id,
+        name: CommunitySchema.name,
+        communityId: CommunitySchema.communityId,
+        description: CommunitySchema.description,
+        isActive: CommunitySchema.isActive,
+        createdAt: CommunitySchema.createdAt,
+        updatedAt: CommunitySchema.updatedAt,
+      })
+      .from(CommunitySchema)
+      .where(
+        and(
+          eq(CommunitySchema.userId, userId),
+          eq(CommunitySchema.isActive, true),
+        ),
+      )
+      .orderBy(CommunitySchema.createdAt);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text:
+            communities.length === 0
+              ? "No communities found."
+              : `Your communities (active):\n\n${communities
+                  .map(
+                    (c, i) =>
+                      `${i + 1}. Community ID: ${c.communityId}\n   Name: ${c.name}\n   Description: ${c.description || "-"}\n   Created: ${c.createdAt}`,
+                  )
+                  .join("\n\n")}`,
+        },
+      ],
+      communities,
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 
 /**
- * GET handler for Streamable HTTP transport - establishes SSE stream
- * Required by MCP Inspector and other clients using Streamable HTTP
+ * Add a community for the authenticated user.
+ * Now validates args using Zod before querying the database.
  */
-export async function GET(request: NextRequest) {
-  try {
-    // Authenticate the request
-    const session = await authenticateRequest(request);
-    if (!session) {
-      return new Response(null, {
-        status: 401,
-      });
-    }
-
-    // Check if client accepts Server-Sent Events
-    const acceptHeader = request.headers.get("accept") || "";
-    if (!acceptHeader.includes("text/event-stream")) {
-      return new NextResponse("Method Not Allowed", { status: 405 });
-    }
-
-    // Create SSE stream
-    const stream = new ReadableStream({
-      start(controller) {
-        // Send initial connection event
-        const encoder = new TextEncoder();
-        const data = `data: ${JSON.stringify({
-          type: "connection",
-          timestamp: new Date().toISOString(),
-          sessionId: crypto.randomUUID(),
-        })}\n\n`;
-        controller.enqueue(encoder.encode(data));
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, Accept, Mcp-Session-Id",
-        "Access-Control-Expose-Headers": "Mcp-Session-Id",
-      },
-    });
-  } catch (error) {
-    console.error("MCP GET request error:", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+export async function addCommunity(args: any, userId: string) {
+  // Validate input
+  const parsed = addCommunitySchema.safeParse(args);
+  if (!parsed.success) {
+    return {
+      content: [
+        { type: "text", text: `Invalid input: ${parsed.error.message}` },
+      ],
+      isError: true,
+    };
   }
-}
-
-// OPTIONS handler for CORS
-export async function OPTIONS(_: NextRequest) {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-      "Access-Control-Allow-Headers":
-        "Content-Type, Authorization, Accept, Mcp-Session-Id",
-      "Access-Control-Expose-Headers": "Mcp-Session-Id",
-    },
-  });
+  args = parsed.data;
+  try {
+    const { communityId, name, description } = args;
+    if (!communityId || !name) {
+      return {
+        content: [{ type: "text", text: "communityId and name are required." }],
+        isError: true,
+      };
+    }
+    // Check for duplicate
+    const existing = await db
+      .select()
+      .from(CommunitySchema)
+      .where(
+        and(
+          eq(CommunitySchema.userId, userId),
+          eq(CommunitySchema.communityId, communityId),
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) {
+      return {
+        content: [
+          { type: "text", text: "Community ID already exists for this user." },
+        ],
+        isError: true,
+      };
+    }
+    const [community] = await db
+      .insert(CommunitySchema)
+      .values({
+        communityId,
+        name,
+        description: description || null,
+        userId,
+      })
+      .returning();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Community added: ${community.name} (${community.communityId})`,
+        },
+      ],
+      community,
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        },
+      ],
+      isError: true,
+    };
+  }
 }
