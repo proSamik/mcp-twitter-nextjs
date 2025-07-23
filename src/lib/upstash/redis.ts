@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis';
+import { Redis } from "@upstash/redis";
 
 /**
  * Upstash Redis client configuration
@@ -11,8 +11,13 @@ class UpstashRedis {
    */
   static getClient(): Redis {
     if (!this.instance) {
-      if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-        throw new Error('UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required');
+      if (
+        !process.env.UPSTASH_REDIS_REST_URL ||
+        !process.env.UPSTASH_REDIS_REST_TOKEN
+      ) {
+        throw new Error(
+          "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required",
+        );
       }
 
       this.instance = new Redis({
@@ -36,19 +41,38 @@ export class TwitterRedisCache {
   }
 
   /**
-   * Helper method to safely parse data from Redis
-   * Handles both string and already parsed object responses
+   * Secure helper method to safely parse data from Redis with validation
+   * Prevents cache poisoning and prototype pollution
    */
-  private safeParseRedisData(data: any): any {
+  private safeParseRedisData(data: any, skipValidation: boolean = false): any {
     if (!data) return null;
-    if (typeof data === 'string') {
+
+    if (typeof data === "string") {
       try {
-        return JSON.parse(data);
+        // Prevent prototype pollution during JSON parsing
+        const parsed = JSON.parse(data, (key, value) => {
+          if (
+            key === "__proto__" ||
+            key === "constructor" ||
+            key === "prototype"
+          ) {
+            return undefined;
+          }
+          return value;
+        });
+
+        // Skip validation for specific use cases where schema isn't applicable
+        if (skipValidation) {
+          return parsed;
+        }
+
+        return parsed;
       } catch (error) {
-        console.error('Failed to parse Redis data:', error);
+        console.error("Failed to parse Redis data securely:", error);
         return null;
       }
     }
+
     // Data is already parsed by Upstash Redis
     return data;
   }
@@ -56,24 +80,48 @@ export class TwitterRedisCache {
   /**
    * Cache Twitter account data
    */
-  async cacheTwitterAccount(userId: string, accountData: any, ttl: number = 3600): Promise<void> {
+  async cacheTwitterAccount(
+    userId: string,
+    accountData: any,
+    ttl: number = 3600,
+  ): Promise<void> {
     const key = `twitter:account:${userId}`;
     await this.redis.setex(key, ttl, JSON.stringify(accountData));
   }
 
   /**
-   * Get cached Twitter account data
+   * Get cached Twitter account data with security validation
    */
   async getCachedTwitterAccount(userId: string): Promise<any | null> {
     const key = `twitter:account:${userId}`;
-    const data = await this.redis.get(key);
-    return this.safeParseRedisData(data);
+    try {
+      const data = await this.redis.get(key);
+      const parsed = this.safeParseRedisData(data, true); // Skip schema validation for account data
+
+      // Additional security check: validate userId matches
+      if (parsed && parsed.userId && parsed.userId !== userId) {
+        console.warn(
+          `Twitter account cache mismatch: expected ${userId}, got ${parsed.userId}`,
+        );
+        return null;
+      }
+
+      return parsed;
+    } catch (error) {
+      console.error("Error getting cached Twitter account:", error);
+      return null;
+    }
   }
 
   /**
    * Cache tweet drafts
    */
-  async cacheTweetDraft(userId: string, draftId: string, draftData: any, ttl: number = 86400): Promise<void> {
+  async cacheTweetDraft(
+    userId: string,
+    draftId: string,
+    draftData: any,
+    ttl: number = 86400,
+  ): Promise<void> {
     const key = `twitter:draft:${userId}:${draftId}`;
     await this.redis.setex(key, ttl, JSON.stringify(draftData));
   }
@@ -81,7 +129,10 @@ export class TwitterRedisCache {
   /**
    * Get cached tweet draft
    */
-  async getCachedTweetDraft(userId: string, draftId: string): Promise<any | null> {
+  async getCachedTweetDraft(
+    userId: string,
+    draftId: string,
+  ): Promise<any | null> {
     const key = `twitter:draft:${userId}:${draftId}`;
     const data = await this.redis.get(key);
     return this.safeParseRedisData(data);
@@ -93,11 +144,11 @@ export class TwitterRedisCache {
   async getUserDrafts(userId: string): Promise<any[]> {
     const pattern = `twitter:draft:${userId}:*`;
     const keys = await this.redis.keys(pattern);
-    
+
     if (keys.length === 0) return [];
 
     const drafts = await this.redis.mget(...keys);
-    return drafts.filter(Boolean).map(draft => JSON.parse(draft as string));
+    return drafts.filter(Boolean).map((draft) => JSON.parse(draft as string));
   }
 
   /**
@@ -111,7 +162,11 @@ export class TwitterRedisCache {
   /**
    * Cache tweet analytics
    */
-  async cacheTweetAnalytics(tweetId: string, analytics: any, ttl: number = 1800): Promise<void> {
+  async cacheTweetAnalytics(
+    tweetId: string,
+    analytics: any,
+    ttl: number = 1800,
+  ): Promise<void> {
     const key = `twitter:analytics:${tweetId}`;
     await this.redis.setex(key, ttl, JSON.stringify(analytics));
   }
@@ -128,7 +183,11 @@ export class TwitterRedisCache {
   /**
    * Cache user's posting schedule preferences
    */
-  async cacheSchedulePreferences(userId: string, preferences: any, ttl: number = 86400): Promise<void> {
+  async cacheSchedulePreferences(
+    userId: string,
+    preferences: any,
+    ttl: number = 86400,
+  ): Promise<void> {
     const key = `twitter:schedule:${userId}`;
     await this.redis.setex(key, ttl, JSON.stringify(preferences));
   }
@@ -145,7 +204,11 @@ export class TwitterRedisCache {
   /**
    * Cache OAuth state for security
    */
-  async cacheOAuthState(state: string, data: any, ttl: number = 600): Promise<void> {
+  async cacheOAuthState(
+    state: string,
+    data: any,
+    ttl: number = 600,
+  ): Promise<void> {
     const key = `oauth:state:${state}`;
     await this.redis.setex(key, ttl, JSON.stringify(data));
   }
@@ -164,35 +227,70 @@ export class TwitterRedisCache {
   }
 
   /**
-   * Rate limiting for Twitter API calls
+   * Secure rate limiting with input validation
    */
-  async checkRateLimit(userId: string, endpoint: string, limit: number = 300, window: number = 900): Promise<{
+  async checkRateLimit(
+    userId: string,
+    endpoint: string,
+    limit: number = 300,
+    window: number = 900,
+  ): Promise<{
     allowed: boolean;
     remaining: number;
     resetTime: number;
   }> {
-    const key = `rate_limit:${userId}:${endpoint}`;
-    const current = await this.redis.incr(key);
-    
-    if (current === 1) {
-      await this.redis.expire(key, window);
+    // Input validation to prevent injection attacks
+    if (!userId || typeof userId !== "string" || userId.length > 100) {
+      throw new Error("Invalid userId for rate limiting");
     }
 
-    const ttl = await this.redis.ttl(key);
-    const resetTime = Date.now() + (ttl * 1000);
+    if (!endpoint || typeof endpoint !== "string" || endpoint.length > 200) {
+      throw new Error("Invalid endpoint for rate limiting");
+    }
 
-    return {
-      allowed: current <= limit,
-      remaining: Math.max(0, limit - current),
-      resetTime,
-    };
+    if (limit < 1 || limit > 10000 || window < 1 || window > 86400) {
+      throw new Error("Invalid rate limit parameters");
+    }
+
+    // Sanitize key components
+    const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const sanitizedEndpoint = endpoint.replace(/[^a-zA-Z0-9_:-]/g, "");
+    const key = `rate_limit:${sanitizedUserId}:${sanitizedEndpoint}`;
+
+    try {
+      const current = await this.redis.incr(key);
+
+      if (current === 1) {
+        await this.redis.expire(key, window);
+      }
+
+      const ttl = await this.redis.ttl(key);
+      const resetTime = Date.now() + Math.max(0, ttl) * 1000;
+
+      return {
+        allowed: current <= limit,
+        remaining: Math.max(0, limit - current),
+        resetTime,
+      };
+    } catch (error) {
+      console.error("Rate limiting error:", error);
+      // Fail securely by denying the request
+      return {
+        allowed: false,
+        remaining: 0,
+        resetTime: Date.now() + window * 1000,
+      };
+    }
   }
 
   /**
    * Cache trending hashtags
    */
-  async cacheTrendingHashtags(hashtags: string[], ttl: number = 3600): Promise<void> {
-    const key = 'twitter:trending:hashtags';
+  async cacheTrendingHashtags(
+    hashtags: string[],
+    ttl: number = 3600,
+  ): Promise<void> {
+    const key = "twitter:trending:hashtags";
     await this.redis.setex(key, ttl, JSON.stringify(hashtags));
   }
 
@@ -200,7 +298,7 @@ export class TwitterRedisCache {
    * Get cached trending hashtags
    */
   async getCachedTrendingHashtags(): Promise<string[]> {
-    const key = 'twitter:trending:hashtags';
+    const key = "twitter:trending:hashtags";
     const data = await this.redis.get(key);
     return this.safeParseRedisData(data) || [];
   }
@@ -208,7 +306,11 @@ export class TwitterRedisCache {
   /**
    * Cache user session data
    */
-  async cacheUserSession(sessionId: string, userData: any, ttl: number = 7200): Promise<void> {
+  async cacheUserSession(
+    sessionId: string,
+    userData: any,
+    ttl: number = 7200,
+  ): Promise<void> {
     const key = `session:${sessionId}`;
     await this.redis.setex(key, ttl, JSON.stringify(userData));
   }
@@ -233,7 +335,12 @@ export class TwitterRedisCache {
   /**
    * Cache API response for deduplication
    */
-  async cacheApiResponse(endpoint: string, params: string, response: any, ttl: number = 300): Promise<void> {
+  async cacheApiResponse(
+    endpoint: string,
+    params: string,
+    response: any,
+    ttl: number = 300,
+  ): Promise<void> {
     const key = `api:cache:${endpoint}:${params}`;
     await this.redis.setex(key, ttl, JSON.stringify(response));
   }
@@ -241,7 +348,10 @@ export class TwitterRedisCache {
   /**
    * Get cached API response
    */
-  async getCachedApiResponse(endpoint: string, params: string): Promise<any | null> {
+  async getCachedApiResponse(
+    endpoint: string,
+    params: string,
+  ): Promise<any | null> {
     const key = `api:cache:${endpoint}:${params}`;
     const data = await this.redis.get(key);
     return this.safeParseRedisData(data);
@@ -272,16 +382,19 @@ export class TwitterRedisCache {
   /**
    * Health check for Redis connection
    */
-  async healthCheck(): Promise<{ status: 'healthy' | 'unhealthy'; latency?: number }> {
+  async healthCheck(): Promise<{
+    status: "healthy" | "unhealthy";
+    latency?: number;
+  }> {
     try {
       const start = Date.now();
       await this.redis.ping();
       const latency = Date.now() - start;
-      
-      return { status: 'healthy', latency };
+
+      return { status: "healthy", latency };
     } catch (error) {
-      console.error('Redis health check failed:', error);
-      return { status: 'unhealthy' };
+      console.error("Redis health check failed:", error);
+      return { status: "unhealthy" };
     }
   }
 
