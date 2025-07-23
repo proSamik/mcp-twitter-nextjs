@@ -10,7 +10,6 @@ import {
   IconUserBolt,
   IconStar,
   IconCalendar,
-  IconGift,
   IconUsers,
   IconKey,
   IconCreditCard,
@@ -20,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { authClient } from "auth/client";
 import { useSidebar, useStoreActions } from "../../app/store";
 
-type UserTier = "free" | "monthly" | "yearly";
+type UserTier = "monthly" | "yearly";
 
 /**
  * App sidebar component with navigation links and user profile
@@ -28,7 +27,7 @@ type UserTier = "free" | "monthly" | "yearly";
 export function AppSidebar({
   children,
   onNavigate,
-  userTier = "free",
+  userTier = "monthly",
 }: {
   children: React.ReactNode;
   onNavigate: (
@@ -65,14 +64,12 @@ export function AppSidebar({
    */
   const getTierIcon = () => {
     switch (userTier) {
-      case "free":
-        return <IconGift className="h-4 w-4 text-gray-500" />;
       case "monthly":
         return <IconStar className="h-4 w-4 text-blue-500" />;
       case "yearly":
         return <IconCalendar className="h-4 w-4 text-purple-500" />;
       default:
-        return <IconGift className="h-4 w-4 text-gray-500" />;
+        return <IconStar className="h-4 w-4 text-blue-500" />;
     }
   };
 
@@ -81,14 +78,12 @@ export function AppSidebar({
    */
   const getTierName = () => {
     switch (userTier) {
-      case "free":
-        return "Free";
       case "monthly":
         return "Monthly";
       case "yearly":
         return "Yearly";
       default:
-        return "Free";
+        return "Monthly";
     }
   };
 
