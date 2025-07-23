@@ -47,9 +47,12 @@ export const auth = betterAuth({
         checkout({
           products: [
             {
-              productId:
-                process.env.NEXT_PUBLIC_POLAR_LIFETIME_PRODUCT_ID || "",
-              slug: "lifetime",
+              productId: process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID || "",
+              slug: "monthly",
+            },
+            {
+              productId: process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID || "",
+              slug: "yearly",
             },
           ],
           successUrl: "/app?checkout_success=true&checkout_id={CHECKOUT_ID}",

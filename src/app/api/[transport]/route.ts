@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth/server";
 import { createMcpHandler } from "@vercel/mcp-adapter";
 import { withMcpAuth } from "better-auth/plugins";
 import { z } from "zod";
+import { subscriptionValidator } from "@/lib/security/subscription-validator";
+import { SecureRateLimiter } from "@/lib/security/validation";
 import {
   listTweets,
   createTweet,
@@ -17,7 +19,15 @@ import {
 } from "./actions";
 import { getTwitterCache } from "@/lib/upstash/redis";
 
-// Production-ready Redis-based rate limiter
+// Initialize secure rate limiter with backup mechanism
+const secureRateLimiter = new SecureRateLimiter();
+
+// Secure subscription validation with comprehensive security checks
+async function checkAndCacheSubscriptionState(userId: string) {
+  return await subscriptionValidator.validateSubscription(userId);
+}
+
+// Secure rate limiter with Redis backup and in-memory fallback
 async function checkRateLimit(
   userId: string,
   operation: string,
@@ -27,14 +37,66 @@ async function checkRateLimit(
   allowed: boolean;
   remaining: number;
   resetTime: number;
+  source: "redis" | "memory";
 }> {
   const redis = getTwitterCache();
-  return await redis.checkRateLimit(
-    userId,
-    `mcp:${operation}`,
-    limit,
-    windowSeconds,
-  );
+
+  try {
+    // Try Redis first
+    const redisResult = await redis.checkRateLimit(
+      userId,
+      `mcp:${operation}`,
+      limit,
+      windowSeconds,
+    );
+
+    // Use secure rate limiter as backup validation
+    const secureResult = await secureRateLimiter.checkRateLimit(
+      `${userId}:mcp:${operation}`,
+      {
+        maxRequests: limit,
+        windowMs: windowSeconds * 1000,
+      },
+      {
+        count: limit - redisResult.remaining,
+        resetTime: redisResult.resetTime,
+        windowStart: Date.now() - windowSeconds * 1000,
+      },
+    );
+
+    // Use the more restrictive result for security
+    const allowed = redisResult.allowed && secureResult.allowed;
+    const remaining = Math.min(redisResult.remaining, secureResult.remaining);
+    const resetTime = Math.max(redisResult.resetTime, secureResult.resetTime);
+
+    return {
+      allowed,
+      remaining,
+      resetTime,
+      source: "redis" as const,
+    };
+  } catch (redisError) {
+    console.warn(
+      "Redis rate limiting failed, using memory fallback:",
+      redisError,
+    );
+
+    // Fallback to secure in-memory rate limiter
+    const result = await secureRateLimiter.checkRateLimit(
+      `${userId}:mcp:${operation}`,
+      {
+        maxRequests: Math.floor(limit * 0.8), // More restrictive when Redis is down
+        windowMs: windowSeconds * 1000,
+      },
+    );
+
+    return {
+      allowed: result.allowed,
+      remaining: result.remaining,
+      resetTime: result.resetTime,
+      source: result.source,
+    };
+  }
 }
 
 // Rate limit error response with details
@@ -51,7 +113,46 @@ function createRateLimitResponse(remaining: number, resetTime: number) {
   };
 }
 
-const handler = withMcpAuth(auth, (req, session) => {
+const handler = withMcpAuth(auth, async (req, session) => {
+  // Comprehensive security validation
+  const subscriptionResult = await checkAndCacheSubscriptionState(
+    session.userId,
+  );
+
+  // Server-side subscription validation (prevents client-side bypass)
+  if (!subscriptionResult.hasValidSubscription) {
+    console.warn(
+      `MCP access denied for user ${session.userId}: ${subscriptionResult.error || "No active subscription"}`,
+    );
+
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: {
+          code: -32001,
+          message:
+            "❌ SUBSCRIPTION REQUIRED: This MCP server requires an active monthly or yearly subscription to access premium features. Please upgrade your subscription to continue using the Twitter management tools.",
+          data: {
+            validationSource: subscriptionResult.source,
+            timestamp: subscriptionResult.validatedAt,
+          },
+        },
+      }),
+      {
+        status: 403,
+        headers: {
+          "Content-Type": "application/json",
+          "X-RateLimit-Source": "server-validation",
+        },
+      },
+    );
+  }
+
+  // Log successful validation for security monitoring
+  console.info(
+    `MCP access granted for user ${session.userId} with ${subscriptionResult.tier} subscription (source: ${subscriptionResult.source})`,
+  );
+
   // session contains the access token record with scopes and user ID
   return createMcpHandler(
     (server) => {

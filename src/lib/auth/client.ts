@@ -76,74 +76,8 @@ export const enhancedAuthClient = {
       }
     },
 
-    /**
-     * Enhanced orders list method - directly calls fallback API
-     */
-    orders: {
-      list: async (options: {
-        query: {
-          page: number;
-          limit: number;
-          productBillingType: "one_time" | "recurring";
-        };
-      }) => {
-        console.log(
-          "Enhanced orders.list: Using direct fallback API with options:",
-          options,
-        );
-
-        try {
-          const params = new URLSearchParams({
-            page: options.query.page.toString(),
-            limit: options.query.limit.toString(),
-            productBillingType: options.query.productBillingType,
-          });
-
-          const response = await fetch(`/api/polar-fallback/orders?${params}`, {
-            method: "GET",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-          });
-
-          if (!response.ok) {
-            throw new Error(
-              `Orders API failed with status: ${response.status}`,
-            );
-          }
-
-          const result = await response.json();
-          console.log("Orders fallback API response:", result);
-
-          if (result.success) {
-            // Format response to match Better Auth structure
-            return {
-              data: {
-                result: result.data,
-              },
-            };
-          } else {
-            throw new Error(result.error || "Orders API returned error");
-          }
-        } catch (error) {
-          console.error("Orders fallback API error:", error);
-          // Return empty data structure instead of throwing
-          return {
-            data: {
-              result: {
-                items: [],
-                pagination: {
-                  total_count: 0,
-                  max_page: 0,
-                },
-              },
-            },
-          };
-        }
-      },
-    },
-
-    // Remove the state method since we're not using customer.state anymore
-    // state: authClient.customer.state,
+    // Keep original state method unchanged
+    state: authClient.customer.state,
   },
 };
 

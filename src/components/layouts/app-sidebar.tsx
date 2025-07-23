@@ -8,18 +8,18 @@ import {
   IconBrandTabler,
   IconSettings,
   IconUserBolt,
-  IconCreditCard,
-  IconCrown,
-  IconGift,
+  IconStar,
+  IconCalendar,
   IconUsers,
   IconKey,
+  IconCreditCard,
 } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { authClient } from "auth/client";
 import { useSidebar, useStoreActions } from "../../app/store";
 
-type UserTier = "free" | "lifetime";
+type UserTier = "monthly" | "yearly";
 
 /**
  * App sidebar component with navigation links and user profile
@@ -27,7 +27,7 @@ type UserTier = "free" | "lifetime";
 export function AppSidebar({
   children,
   onNavigate,
-  userTier = "free",
+  userTier = "monthly",
 }: {
   children: React.ReactNode;
   onNavigate: (
@@ -64,12 +64,12 @@ export function AppSidebar({
    */
   const getTierIcon = () => {
     switch (userTier) {
-      case "free":
-        return <IconGift className="h-4 w-4 text-gray-500" />;
-      case "lifetime":
-        return <IconCrown className="h-4 w-4 text-yellow-500" />;
+      case "monthly":
+        return <IconStar className="h-4 w-4 text-blue-500" />;
+      case "yearly":
+        return <IconCalendar className="h-4 w-4 text-purple-500" />;
       default:
-        return <IconGift className="h-4 w-4 text-gray-500" />;
+        return <IconStar className="h-4 w-4 text-blue-500" />;
     }
   };
 
@@ -78,12 +78,12 @@ export function AppSidebar({
    */
   const getTierName = () => {
     switch (userTier) {
-      case "free":
-        return "Free";
-      case "lifetime":
-        return "Lifetime";
+      case "monthly":
+        return "Monthly";
+      case "yearly":
+        return "Yearly";
       default:
-        return "Free";
+        return "Monthly";
     }
   };
 
@@ -117,6 +117,16 @@ export function AppSidebar({
       ),
     },
     {
+      label: "OAuth Setup",
+      href: "/oauth-user-setup",
+      icon: <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
+    },
+    {
+      label: "Communities",
+      href: "/communities",
+      icon: <IconUsers className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
+    },
+    {
       label: "Profile",
       href: "#",
       icon: (
@@ -131,18 +141,7 @@ export function AppSidebar({
       ),
     },
     {
-      label: "OAuth Setup",
-      href: "/oauth-user-setup",
-      icon: <IconKey className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
-    },
-    {
-      label: "Communities",
-      href: "/communities",
-      icon: <IconUsers className="h-5 w-5 shrink-0 text-sidebar-foreground" />,
-    },
-    {
-      label:
-        userTier === "lifetime" ? "Manage Purchase" : "Upgrade to Lifetime",
+      label: "Manage Subscription",
       href: "#",
       icon: (
         <IconCreditCard className="h-5 w-5 shrink-0 text-sidebar-foreground" />
@@ -193,9 +192,7 @@ export function AppSidebar({
               <div className="mt-6 flex flex-col gap-2">
                 {links.map((link, idx) => {
                   const isLogout = link.label === "Logout";
-                  const isSubscription =
-                    link.label.includes("Manage Purchase") ||
-                    link.label.includes("Upgrade");
+                  const isSubscription = link.label === "Manage Subscription";
                   return (
                     <div
                       key={idx}
