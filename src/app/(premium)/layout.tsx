@@ -2,14 +2,16 @@
 
 import { redirect } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
+import React from "react";
 import { authClient } from "auth/client";
 import { AppSidebar } from "@/components/layouts/app-sidebar";
 import { Settings } from "@/components/settings";
 import { Profile } from "@/components/profile";
 import { SubscriptionManagement } from "@/components/subscription-management";
 import { NotificationManager } from "@/components/notification-manager";
+import { PricingOverlay } from "@/components/pricing-overlay";
 
-type UserTier = "free" | "monthly" | "yearly";
+type UserTier = "monthly" | "yearly";
 
 /**
  * Loading skeleton for premium layout
@@ -26,7 +28,7 @@ function PremiumLayoutSkeleton() {
  * Hook to manage user tier state
  */
 function useUserTier() {
-  const [userTier, setUserTier] = useState<UserTier>("free");
+  const [userTier, setUserTier] = useState<UserTier | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { data: session } = authClient.useSession();
 
@@ -74,10 +76,10 @@ function useUserTier() {
 
           setUserTier(tier);
         } else {
-          setUserTier("free");
+          setUserTier(null);
         }
       } catch (_error) {
-        setUserTier("free");
+        setUserTier(null);
       } finally {
         setIsLoading(false);
       }
@@ -126,7 +128,7 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
   const renderContent = () => {
     switch (currentPage) {
       case "dashboard":
-        return children; // Render the original dashboard page
+        return children;
       case "profile":
         return <Profile />;
       case "settings":
@@ -134,7 +136,7 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
       case "subscription":
         return (
           <SubscriptionManagement
-            currentTier={userTier}
+            currentTier={userTier!}
             onBack={() => setCurrentPage("dashboard")}
           />
         );
@@ -168,10 +170,20 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
     return null; // Handled by redirect
   }
 
+  // Show pricing overlay for users without subscription
+  if (!userTier) {
+    return (
+      <>
+        <NotificationManager />
+        <PricingOverlay />
+      </>
+    );
+  }
+
   return (
     <>
       <NotificationManager />
-      <AppSidebar onNavigate={handleNavigation} userTier={userTier}>
+      <AppSidebar onNavigate={handleNavigation} userTier={userTier!}>
         {renderContent()}
       </AppSidebar>
     </>
