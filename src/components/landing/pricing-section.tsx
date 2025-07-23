@@ -118,9 +118,7 @@ export function PricingSection() {
     }
   }, [searchParams, session]);
 
-  const handleCheckout = async (
-    planSlug: "free" | "monthly" | "yearly" | "lifetime",
-  ) => {
+  const handleCheckout = async (planSlug: "free" | "monthly" | "yearly") => {
     // Handle free plan - just redirect to dashboard
     if (planSlug === "free") {
       if (!session?.user) {
@@ -157,17 +155,7 @@ export function PricingSection() {
         hasActiveSubscription &&
         (planSlug === "monthly" || planSlug === "yearly")
       ) {
-        toast.info(
-          "You already have an active subscription. You can manage it in your dashboard.",
-        );
         return;
-      }
-
-      // Allow upgrading to lifetime even with existing subscription
-      if (hasActiveSubscription && planSlug === "lifetime") {
-        toast.info(
-          "Upgrading to lifetime will replace your current subscription.",
-        );
       }
     }
 
