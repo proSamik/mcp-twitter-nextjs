@@ -1,8 +1,7 @@
 "use client";
 
 import { redirect } from "next/navigation";
-import { useEffect, useState, Suspense, useRef } from "react";
-import { enhancedAuthClient } from "auth/client";
+import { useEffect, useState, Suspense } from "react";
 import { authClient } from "auth/client";
 import { AppSidebar } from "@/components/layouts/app-sidebar";
 import { Settings } from "@/components/settings";
@@ -10,7 +9,7 @@ import { Profile } from "@/components/profile";
 import { SubscriptionManagement } from "@/components/subscription-management";
 import { NotificationManager } from "@/components/notification-manager";
 
-type UserTier = "free" | "lifetime";
+type UserTier = "free" | "monthly" | "yearly";
 
 /**
  * Loading skeleton for premium layout
@@ -28,14 +27,12 @@ function PremiumLayoutSkeleton() {
  */
 function useUserTier() {
   const [userTier, setUserTier] = useState<UserTier>("free");
-  const [lifetimeOrders, setLifetimeOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { data: session } = authClient.useSession();
-  const fetchInitiated = useRef(false);
 
-  // Fetch lifetime orders and determine tier
+  // Fetch customer state and determine tier
   useEffect(() => {
-    const fetchUserTier = async () => {
+    const fetchCustomerState = async () => {
       if (!session?.user) {
         setIsLoading(false);
         return;
@@ -44,27 +41,38 @@ function useUserTier() {
       try {
         setIsLoading(true);
 
-        // Fetch lifetime orders with automatic fallback
-        let newLifetimeOrders: any[] = [];
+        // Step 1: First fetch customer state (gets updated immediately after payment)
+        let newCustomerState: any = null;
         try {
-          const ordersResult = await enhancedAuthClient.customer.orders.list({
-            query: {
-              page: 1,
-              limit: 10,
-              productBillingType: "one_time",
-            },
-          });
-          const rawOrders = ordersResult?.data?.result?.items || [];
-          setLifetimeOrders(rawOrders); // Store the orders
-          newLifetimeOrders = rawOrders;
-        } catch (error) {
+          const stateResult = await authClient.customer.state();
+          newCustomerState = stateResult?.data || null;
+        } catch (_error) {
           // Silent fail - customer might not be configured yet
-          console.log("Failed to fetch lifetime orders:", error);
         }
 
-        // Determine user tier based on lifetime orders
-        if (newLifetimeOrders.length > 0) {
-          setUserTier("lifetime");
+        // Determine user tier
+        const MONTHLY_PRODUCT_ID =
+          process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID;
+        const YEARLY_PRODUCT_ID =
+          process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID;
+
+        const activeSubscription = newCustomerState?.activeSubscriptions?.find(
+          (sub: any) => {
+            return (
+              sub.status === "active" &&
+              (sub.productId === MONTHLY_PRODUCT_ID ||
+                sub.productId === YEARLY_PRODUCT_ID)
+            );
+          },
+        );
+
+        if (activeSubscription) {
+          const tier =
+            activeSubscription.productId === MONTHLY_PRODUCT_ID
+              ? "monthly"
+              : "yearly";
+
+          setUserTier(tier);
         } else {
           setUserTier("free");
         }
@@ -75,13 +83,10 @@ function useUserTier() {
       }
     };
 
-    if (session && !fetchInitiated.current) {
-      fetchInitiated.current = true;
-      fetchUserTier();
-    }
+    fetchCustomerState();
   }, [session]);
 
-  return { userTier, lifetimeOrders, isLoading };
+  return { userTier, isLoading };
 }
 
 /**
@@ -89,7 +94,7 @@ function useUserTier() {
  */
 function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
   const { data: session, isPending: isAuthLoading } = authClient.useSession();
-  const { userTier, lifetimeOrders, isLoading: isTierLoading } = useUserTier();
+  const { userTier, isLoading: isTierLoading } = useUserTier();
   const [currentPage, setCurrentPage] = useState<
     | "dashboard"
     | "profile"
@@ -130,7 +135,6 @@ function PremiumLayoutContent({ children }: { children: React.ReactNode }) {
         return (
           <SubscriptionManagement
             currentTier={userTier}
-            lifetimeOrders={lifetimeOrders}
             onBack={() => setCurrentPage("dashboard")}
           />
         );
