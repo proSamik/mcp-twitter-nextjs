@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth/server";
 import { createMcpHandler } from "@vercel/mcp-adapter";
 import { withMcpAuth } from "better-auth/plugins";
 import { z } from "zod";
+import { subscriptionValidator } from "@/lib/security/subscription-validator";
+import { SecureRateLimiter } from "@/lib/security/validation";
 import {
   listTweets,
   createTweet,
@@ -17,117 +19,15 @@ import {
 } from "./actions";
 import { getTwitterCache } from "@/lib/upstash/redis";
 
-// Check and cache subscription state using Redis
-async function checkAndCacheSubscriptionState(userId: string): Promise<{
-  hasValidSubscription: boolean;
-  tier: "monthly" | "yearly";
-  error?: string;
-}> {
-  const cache = getTwitterCache();
-  const cacheKey = `subscription:${userId}`;
+// Initialize secure rate limiter with backup mechanism
+const secureRateLimiter = new SecureRateLimiter();
 
-  try {
-    // Check cache first (5 minute TTL)
-    const cached = await cache["redis"].get(cacheKey);
-    if (cached) {
-      // Use the private safeParseRedisData method or handle parsing manually
-      const parsed = typeof cached === "string" ? JSON.parse(cached) : cached;
-      return parsed as {
-        hasValidSubscription: boolean;
-        tier: "monthly" | "yearly";
-        error?: string;
-      };
-    }
-
-    // Use the Polar fallback client pattern from the existing codebase
-    const { PolarFallbackClient } = await import("@/lib/polar/client");
-    const polarFallback = new PolarFallbackClient();
-
-    try {
-      // Get customer state using the fallback client
-      const customerState = await polarFallback.getCustomerState(userId, {
-        email: "", // We don't have email in MCP context, but method might still work
-        name: "",
-      });
-
-      console.log("Customer state:", JSON.stringify(customerState, null, 2));
-
-      if (!customerState) {
-        console.log("No customer state available");
-        throw new Error("No customer state available");
-      }
-
-      // Check for active subscriptions
-      const MONTHLY_PRODUCT_ID =
-        process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID;
-      const YEARLY_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID;
-
-      console.log(
-        "Product IDs - Monthly:",
-        MONTHLY_PRODUCT_ID,
-        "Yearly:",
-        YEARLY_PRODUCT_ID,
-      );
-      console.log("Active subscriptions:", customerState.activeSubscriptions);
-
-      const activeSubscription = customerState.activeSubscriptions?.find(
-        (sub: any) => {
-          console.log(
-            `Checking subscription: status=${sub.status}, productId=${sub.productId}`,
-          );
-          return (
-            sub.status === "active" &&
-            (sub.productId === MONTHLY_PRODUCT_ID ||
-              sub.productId === YEARLY_PRODUCT_ID)
-          );
-        },
-      );
-
-      console.log("Found active subscription:", activeSubscription);
-
-      if (!activeSubscription) {
-        console.log("No active subscription found");
-        throw new Error("No active subscription found");
-      }
-
-      const result: {
-        hasValidSubscription: boolean;
-        tier: "monthly" | "yearly";
-        error?: string;
-      } = {
-        hasValidSubscription: true,
-        tier: (activeSubscription.productId === MONTHLY_PRODUCT_ID
-          ? "monthly"
-          : "yearly") as "monthly" | "yearly",
-      };
-
-      // Cache result for 5 minutes
-      await cache["redis"].setex(cacheKey, 300, JSON.stringify(result));
-      return result;
-    } catch (_polarError) {
-      // Cache negative result for 1 minute to prevent repeated API calls
-      const errorResult = {
-        hasValidSubscription: false,
-        tier: "monthly" as const,
-        error: "Could not verify subscription status",
-      };
-      await cache["redis"].setex(cacheKey, 60, JSON.stringify(errorResult));
-      return errorResult;
-    }
-  } catch (error) {
-    console.error("Subscription check error:", error);
-    // Cache negative result for 1 minute to prevent repeated API calls
-    const errorResult = {
-      hasValidSubscription: false,
-      tier: "monthly" as const,
-      error: "Failed to check subscription status",
-    };
-    await cache["redis"].setex(cacheKey, 60, JSON.stringify(errorResult));
-    return errorResult;
-  }
+// Secure subscription validation with comprehensive security checks
+async function checkAndCacheSubscriptionState(userId: string) {
+  return await subscriptionValidator.validateSubscription(userId);
 }
 
-// Production-ready Redis-based rate limiter
+// Secure rate limiter with Redis backup and in-memory fallback
 async function checkRateLimit(
   userId: string,
   operation: string,
@@ -137,14 +37,66 @@ async function checkRateLimit(
   allowed: boolean;
   remaining: number;
   resetTime: number;
+  source: "redis" | "memory";
 }> {
   const redis = getTwitterCache();
-  return await redis.checkRateLimit(
-    userId,
-    `mcp:${operation}`,
-    limit,
-    windowSeconds,
-  );
+
+  try {
+    // Try Redis first
+    const redisResult = await redis.checkRateLimit(
+      userId,
+      `mcp:${operation}`,
+      limit,
+      windowSeconds,
+    );
+
+    // Use secure rate limiter as backup validation
+    const secureResult = await secureRateLimiter.checkRateLimit(
+      `${userId}:mcp:${operation}`,
+      {
+        maxRequests: limit,
+        windowMs: windowSeconds * 1000,
+      },
+      {
+        count: limit - redisResult.remaining,
+        resetTime: redisResult.resetTime,
+        windowStart: Date.now() - windowSeconds * 1000,
+      },
+    );
+
+    // Use the more restrictive result for security
+    const allowed = redisResult.allowed && secureResult.allowed;
+    const remaining = Math.min(redisResult.remaining, secureResult.remaining);
+    const resetTime = Math.max(redisResult.resetTime, secureResult.resetTime);
+
+    return {
+      allowed,
+      remaining,
+      resetTime,
+      source: "redis" as const,
+    };
+  } catch (redisError) {
+    console.warn(
+      "Redis rate limiting failed, using memory fallback:",
+      redisError,
+    );
+
+    // Fallback to secure in-memory rate limiter
+    const result = await secureRateLimiter.checkRateLimit(
+      `${userId}:mcp:${operation}`,
+      {
+        maxRequests: Math.floor(limit * 0.8), // More restrictive when Redis is down
+        windowMs: windowSeconds * 1000,
+      },
+    );
+
+    return {
+      allowed: result.allowed,
+      remaining: result.remaining,
+      resetTime: result.resetTime,
+      source: result.source,
+    };
+  }
 }
 
 // Rate limit error response with details
@@ -162,12 +114,17 @@ function createRateLimitResponse(remaining: number, resetTime: number) {
 }
 
 const handler = withMcpAuth(auth, async (req, session) => {
-  // Check subscription once per request and cache the result
+  // Comprehensive security validation
   const subscriptionResult = await checkAndCacheSubscriptionState(
     session.userId,
   );
 
+  // Server-side subscription validation (prevents client-side bypass)
   if (!subscriptionResult.hasValidSubscription) {
+    console.warn(
+      `MCP access denied for user ${session.userId}: ${subscriptionResult.error || "No active subscription"}`,
+    );
+
     return new Response(
       JSON.stringify({
         jsonrpc: "2.0",
@@ -175,16 +132,26 @@ const handler = withMcpAuth(auth, async (req, session) => {
           code: -32001,
           message:
             "❌ SUBSCRIPTION REQUIRED: This MCP server requires an active monthly or yearly subscription to access premium features. Please upgrade your subscription to continue using the Twitter management tools.",
+          data: {
+            validationSource: subscriptionResult.source,
+            timestamp: subscriptionResult.validatedAt,
+          },
         },
       }),
       {
         status: 403,
         headers: {
           "Content-Type": "application/json",
+          "X-RateLimit-Source": "server-validation",
         },
       },
     );
   }
+
+  // Log successful validation for security monitoring
+  console.info(
+    `MCP access granted for user ${session.userId} with ${subscriptionResult.tier} subscription (source: ${subscriptionResult.source})`,
+  );
 
   // session contains the access token record with scopes and user ID
   return createMcpHandler(
