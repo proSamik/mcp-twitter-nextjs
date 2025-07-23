@@ -114,9 +114,26 @@ export function PricingOverlay() {
         {/* Header with close button */}
         <div className="sticky top-0 bg-background border-b p-6 flex items-center justify-between">
           <div>
-            <div className="inline-flex items-center px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium mb-2">
-              <Star className="h-4 w-4 mr-2" />
-              Premium Access Required
+            <div className="flex items-center gap-2 mb-2">
+              <div className="inline-flex items-center px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium">
+                <Star className="h-4 w-4 mr-2" />
+                Premium Access Required
+              </div>
+              {session?.user && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await authClient.signOut();
+                      window.location.href = "/";
+                    } catch (_error) {
+                      window.location.href = "/";
+                    }
+                  }}
+                  className="inline-flex items-center px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium hover:bg-primary/20 transition-colors"
+                >
+                  Sign Out
+                </button>
+              )}
             </div>
             <h2 className="text-2xl font-bold text-foreground">
               Upgrade to Continue
