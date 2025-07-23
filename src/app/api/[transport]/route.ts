@@ -50,7 +50,10 @@ async function checkAndCacheSubscriptionState(userId: string): Promise<{
         name: "",
       });
 
+      console.log("Customer state:", JSON.stringify(customerState, null, 2));
+
       if (!customerState) {
+        console.log("No customer state available");
         throw new Error("No customer state available");
       }
 
@@ -59,8 +62,19 @@ async function checkAndCacheSubscriptionState(userId: string): Promise<{
         process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID;
       const YEARLY_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID;
 
+      console.log(
+        "Product IDs - Monthly:",
+        MONTHLY_PRODUCT_ID,
+        "Yearly:",
+        YEARLY_PRODUCT_ID,
+      );
+      console.log("Active subscriptions:", customerState.activeSubscriptions);
+
       const activeSubscription = customerState.activeSubscriptions?.find(
         (sub: any) => {
+          console.log(
+            `Checking subscription: status=${sub.status}, productId=${sub.productId}`,
+          );
           return (
             sub.status === "active" &&
             (sub.productId === MONTHLY_PRODUCT_ID ||
@@ -69,7 +83,10 @@ async function checkAndCacheSubscriptionState(userId: string): Promise<{
         },
       );
 
+      console.log("Found active subscription:", activeSubscription);
+
       if (!activeSubscription) {
+        console.log("No active subscription found");
         throw new Error("No active subscription found");
       }
 
@@ -88,11 +105,25 @@ async function checkAndCacheSubscriptionState(userId: string): Promise<{
       await cache["redis"].setex(cacheKey, 300, JSON.stringify(result));
       return result;
     } catch (_polarError) {
-      throw new Error("Could not verify subscription status");
+      // Cache negative result for 1 minute to prevent repeated API calls
+      const errorResult = {
+        hasValidSubscription: false,
+        tier: "monthly" as const,
+        error: "Could not verify subscription status",
+      };
+      await cache["redis"].setex(cacheKey, 60, JSON.stringify(errorResult));
+      return errorResult;
     }
   } catch (error) {
     console.error("Subscription check error:", error);
-    throw new Error("Failed to check subscription status");
+    // Cache negative result for 1 minute to prevent repeated API calls
+    const errorResult = {
+      hasValidSubscription: false,
+      tier: "monthly" as const,
+      error: "Failed to check subscription status",
+    };
+    await cache["redis"].setex(cacheKey, 60, JSON.stringify(errorResult));
+    return errorResult;
   }
 }
 
@@ -132,9 +163,11 @@ function createRateLimitResponse(remaining: number, resetTime: number) {
 
 const handler = withMcpAuth(auth, async (req, session) => {
   // Check subscription once per request and cache the result
-  try {
-    await checkAndCacheSubscriptionState(session.userId);
-  } catch (_error) {
+  const subscriptionResult = await checkAndCacheSubscriptionState(
+    session.userId,
+  );
+
+  if (!subscriptionResult.hasValidSubscription) {
     return new Response(
       JSON.stringify({
         jsonrpc: "2.0",
