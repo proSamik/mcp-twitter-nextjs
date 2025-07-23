@@ -15,25 +15,10 @@ interface PricingTier {
   cta: string;
   highlighted?: boolean;
   badge?: string;
-  planSlug?: "free" | "monthly" | "yearly";
+  planSlug?: "monthly" | "yearly";
 }
 
 const pricingTiers: PricingTier[] = [
-  {
-    name: "Free",
-    price: "Free",
-    description: "Perfect for personal projects and learning",
-    features: [
-      "Complete source code access",
-      "Basic authentication setup",
-      "Database schema & migrations",
-      "Tailwind CSS components",
-      "Docker configuration",
-      "MIT License",
-    ],
-    cta: "Get Started Free",
-    planSlug: "free",
-  },
   {
     name: "Monthly",
     price: "$19",
@@ -118,17 +103,7 @@ export function PricingSection() {
     }
   }, [searchParams, session]);
 
-  const handleCheckout = async (planSlug: "free" | "monthly" | "yearly") => {
-    // Handle free plan - just redirect to dashboard
-    if (planSlug === "free") {
-      if (!session?.user) {
-        window.location.href = "/sign-in";
-        return;
-      }
-      window.location.href = "/app";
-      return;
-    }
-
+  const handleCheckout = async (planSlug: "monthly" | "yearly") => {
     // Check if user is authenticated for paid plans
     if (!session?.user) {
       toast.error("Please sign in to purchase a plan");
@@ -162,8 +137,10 @@ export function PricingSection() {
     try {
       setCheckoutLoading(planSlug);
 
-      // Use customer portal for changing plans
-      await authClient.customer.portal();
+      // Use checkout for new purchases
+      await authClient.checkout({
+        slug: planSlug,
+      });
     } catch (error: any) {
       if (error?.message?.includes("Unauthorized")) {
         toast.error("Please sign in again and try checkout.");
@@ -229,14 +206,6 @@ export function PricingSection() {
           return { disabled: false, text: "Upgrade to Yearly" };
         }
       }
-
-      // Free plan is always available
-      if (tier.planSlug === "free") {
-        return {
-          disabled: false,
-          text: session?.user ? "Go to Dashboard" : "Sign In to Start",
-        };
-      }
     }
 
     if (checkoutLoading === tier.planSlug) {
@@ -264,7 +233,7 @@ export function PricingSection() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {pricingTiers.map((tier, _index) => {
             const buttonState = getButtonState(tier);
 
@@ -342,25 +311,16 @@ export function PricingSection() {
                     <button
                       className="w-full bg-foreground hover:bg-foreground/90 text-background font-semibold py-3 px-6 rounded-lg transition-colors"
                       onClick={() => {
-                        if (tier.name === "Free") {
-                          window.open(
-                            "https://github.com/prosamik/mcp-twitter-nextjs",
-                            "_blank",
-                          );
-                        } else {
-                          toast.info("Contact sales for enterprise pricing");
-                        }
+                        toast.info("Contact sales for enterprise pricing");
                       }}
                     >
                       {tier.cta}
                     </button>
                   )}
                   <p className="text-sm text-muted-foreground mt-3">
-                    {tier.name === "Free"
-                      ? "MIT License, no restrictions"
-                      : tier.name === "Monthly"
-                        ? "Cancel anytime, no long-term commitment"
-                        : "Annual billing, 20% savings"}
+                    {tier.name === "Monthly"
+                      ? "Cancel anytime, no long-term commitment"
+                      : "Annual billing, 20% savings"}
                   </p>
                 </div>
               </div>
