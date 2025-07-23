@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Check,
+  X,
   CreditCard,
-  Crown,
+  Star,
+  Calendar,
   Gift,
   Loader2,
   ArrowLeft,
 } from "lucide-react";
-import { enhancedAuthClient } from "auth/client";
+import { authClient, enhancedAuthClient } from "auth/client";
 import { Button } from "ui/button";
 import { Badge } from "ui/badge";
 import {
@@ -20,7 +22,6 @@ import {
   CardTitle,
 } from "ui/card";
 import { cn } from "@/lib/utils";
-import { authClient } from "auth/client";
 
 interface SubscriptionPlan {
   name: string;
@@ -28,7 +29,7 @@ interface SubscriptionPlan {
   originalPrice?: string;
   description: string;
   features: string[];
-  planSlug: "lifetime";
+  planSlug: "monthly" | "yearly";
   icon: React.ReactNode;
   highlighted?: boolean;
   badge?: string;
@@ -36,70 +37,103 @@ interface SubscriptionPlan {
 
 const subscriptionPlans: SubscriptionPlan[] = [
   {
-    name: "Lifetime",
-    price: "$49",
-    originalPrice: "$199",
-    description: "One-time payment, lifetime access to everything",
+    name: "Monthly",
+    price: "$19",
+    description: "Best for trying premium features",
     features: [
-      "Everything in Free, plus:",
-      "Unlimited analytics events",
-      "Unlimited lead magnet forms",
-      "Unlimited subscribers",
-      "Unlimited time tracking",
-      "Unlimited link variations for tracking",
-      "Unlimited project dashboards",
+      "Polar.sh payment integration",
+      "Advanced auth configurations",
+      "Premium UI components",
       "Email templates & automation",
       "Priority support",
-      "Lifetime updates",
+      "Commercial license",
     ],
-    planSlug: "lifetime",
-    icon: <Crown className="h-5 w-5" />,
+    planSlug: "monthly",
+    icon: <Star className="h-5 w-5" />,
+  },
+  {
+    name: "Yearly",
+    price: "$180",
+    originalPrice: "$228",
+    description: "Best value for ongoing projects",
+    features: [
+      "Everything in Monthly",
+      "20% yearly discount",
+      "Extended support",
+      "Early access to new features",
+      "Advanced documentation",
+      "Priority bug fixes",
+      "Team collaboration tools",
+    ],
+    planSlug: "yearly",
+    icon: <Calendar className="h-5 w-5" />,
     highlighted: true,
-    badge: "75% OFF - Limited Time",
+    badge: "Best Value",
   },
 ];
 
-type UserTier = "free" | "lifetime";
+type UserTier = "free" | "monthly" | "yearly";
 
 interface SubscriptionManagementProps {
   currentTier: UserTier;
-  lifetimeOrders: any[];
   onBack: () => void;
 }
 
 /**
- * Subscription management page component with lifetime plan purchasing
+ * Subscription management page component with plan changing and cancellation
  */
 export function SubscriptionManagement({
   currentTier,
-  lifetimeOrders,
   onBack,
 }: SubscriptionManagementProps) {
+  const [customerState, setCustomerState] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
   /**
-   * Handle lifetime plan purchase via checkout or portal based on order status
+   * Fetch customer state and orders from Polar
    */
-  const handleLifetimePurchase = async () => {
-    setCheckoutLoading("lifetime");
+  const fetchCustomerData = async () => {
+    setIsLoading(true);
     try {
-      await authClient.checkout({
-        products: [process.env.NEXT_PUBLIC_POLAR_LIFETIME_PRODUCT_ID || ""],
-        slug: "lifetime",
-      });
+      // Fetch customer state for active subscriptions
+      const stateResponse = await authClient.customer.state();
+      const stateData = (stateResponse as any)?.data;
+      setCustomerState(stateData || null);
+    } catch (_error: any) {
+      // Handle case where customer doesn't exist yet
+      setCustomerState(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomerData();
+  }, []);
+
+  /**
+   * Handle plan change via customer portal with automatic fallback
+   */
+  const handlePlanChange = async (planSlug: "monthly" | "yearly") => {
+    setCheckoutLoading(planSlug);
+    try {
+      // Use enhanced customer portal with automatic fallback
+      await enhancedAuthClient.customer.portal();
     } catch (error: any) {
-      console.error("Checkout failed:", error);
-      // Optionally, show a toast notification to the user
+      console.error("Portal error:", error);
+      // Fallback to pricing page if both methods fail
+      window.location.href = "/pricing";
     } finally {
       setCheckoutLoading(null);
     }
   };
 
   /**
-   * Handle billing management via customer portal with automatic fallback
+   * Handle subscription management via customer portal with automatic fallback
    */
-  const handleManageBilling = async () => {
+  const handleManageSubscription = async () => {
     setPortalLoading(true);
     try {
       await enhancedAuthClient.customer.portal();
@@ -113,10 +147,10 @@ export function SubscriptionManagement({
   };
 
   /**
-   * Get button state and text for the lifetime plan
+   * Get button state and text for each plan
    */
   const getButtonState = (plan: SubscriptionPlan) => {
-    if (checkoutLoading === plan.planSlug) {
+    if (isLoading || checkoutLoading === plan.planSlug) {
       return {
         disabled: true,
         text: "Loading...",
@@ -124,28 +158,80 @@ export function SubscriptionManagement({
       };
     }
 
-    // Check for lifetime access
-    const hasLifetimeAccess = lifetimeOrders.length > 0;
-    if (hasLifetimeAccess) {
+    // Get product IDs for comparison
+    const MONTHLY_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID;
+    const YEARLY_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID;
+
+    // Check active subscriptions
+    const activeMonthlySubscription = customerState?.activeSubscriptions?.find(
+      (sub: any) =>
+        sub.status === "active" && sub.productId === MONTHLY_PRODUCT_ID,
+    );
+    const activeYearlySubscription = customerState?.activeSubscriptions?.find(
+      (sub: any) =>
+        sub.status === "active" && sub.productId === YEARLY_PRODUCT_ID,
+    );
+
+    if (plan.planSlug === "monthly") {
+      if (activeMonthlySubscription) {
+        return {
+          disabled: true,
+          text: "Current Plan",
+          variant: "secondary" as const,
+        };
+      }
+      if (activeYearlySubscription) {
+        return {
+          disabled: false,
+          text: "Change Plan",
+          variant: "outline" as const,
+        };
+      }
       return {
-        disabled: true,
-        text: "Current Plan",
-        variant: "secondary" as const,
+        disabled: false,
+        text: "Change Plan",
+        variant: "default" as const,
+      };
+    }
+
+    if (plan.planSlug === "yearly") {
+      if (activeYearlySubscription) {
+        return {
+          disabled: true,
+          text: "Current Plan",
+          variant: "secondary" as const,
+        };
+      }
+      if (activeMonthlySubscription) {
+        return {
+          disabled: false,
+          text: "Upgrade Plan",
+          variant: "default" as const,
+        };
+      }
+      return {
+        disabled: false,
+        text: "Change Plan",
+        variant: "default" as const,
       };
     }
 
     return {
       disabled: false,
-      text: "Upgrade to Lifetime",
+      text: "Select Plan",
       variant: "default" as const,
     };
   };
 
   /**
-   * Check if user has lifetime access
+   * Check if user has any active subscription
    */
-  const hasLifetimeAccess = () => {
-    return lifetimeOrders.length > 0;
+  const hasActiveSubscription = () => {
+    return (
+      customerState?.activeSubscriptions?.some(
+        (sub: any) => sub.status === "active",
+      ) || false
+    );
   };
 
   return (
@@ -163,7 +249,7 @@ export function SubscriptionManagement({
               Subscription Management
             </h1>
             <p className="text-muted-foreground mt-1">
-              Manage your subscription and billing settings
+              Manage your subscription, change plans, and billing settings
             </p>
           </div>
         </div>
@@ -185,44 +271,41 @@ export function SubscriptionManagement({
                   {currentTier === "free" && (
                     <Gift className="h-6 w-6 text-muted-foreground" />
                   )}
-                  {currentTier === "lifetime" && (
-                    <Crown className="h-6 w-6 text-primary" />
+                  {currentTier === "monthly" && (
+                    <Star className="h-6 w-6 text-primary" />
                   )}
-                  <span
-                    className={cn(
-                      "text-lg font-medium",
-                      currentTier === "lifetime"
-                        ? "text-primary"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {currentTier === "lifetime" ? "Lifetime Plan" : "Free Plan"}
-                  </span>
-                  {currentTier === "lifetime" && (
-                    <Badge variant="secondary" className="bg-primary/10">
-                      Active
-                    </Badge>
+                  {currentTier === "yearly" && (
+                    <Calendar className="h-6 w-6 text-primary" />
                   )}
+                  <div>
+                    <p className="text-lg font-semibold text-card-foreground capitalize">
+                      {currentTier} Plan
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {currentTier === "free" &&
+                        "Free access to basic features"}
+                      {currentTier === "monthly" &&
+                        "Monthly billing, cancel anytime"}
+                      {currentTier === "yearly" &&
+                        "Annual billing with 20% savings"}
+                    </p>
+                  </div>
                 </div>
-                {hasLifetimeAccess() ? (
+
+                {/* Manage Subscription Button */}
+                {hasActiveSubscription() && (
                   <Button
-                    onClick={handleManageBilling}
+                    onClick={handleManageSubscription}
                     disabled={portalLoading}
+                    variant="outline"
+                    className="gap-2"
                   >
-                    {portalLoading && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {portalLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4" />
                     )}
                     Manage Billing
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleLifetimePurchase}
-                    disabled={checkoutLoading === "lifetime"}
-                  >
-                    {checkoutLoading === "lifetime" && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Upgrade to Lifetime
                   </Button>
                 )}
               </div>
@@ -230,149 +313,197 @@ export function SubscriptionManagement({
           </Card>
 
           {/* Available Plans */}
-          <div className="flex justify-center">
-            <div className="w-full max-w-2xl">
-              <h2 className="text-2xl font-semibold text-foreground mb-4">
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground mb-2">
                 Available Plans
               </h2>
-              <div className="grid md:grid-cols-1 gap-8">
-                {subscriptionPlans.map((plan) => {
-                  const buttonState = getButtonState(plan);
-                  return (
-                    <Card
-                      key={plan.name}
-                      className={cn(
-                        "border-border bg-card",
-                        plan.highlighted && "border-primary",
-                      )}
-                    >
-                      <CardHeader>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="text-xl font-semibold text-card-foreground flex items-center gap-2">
-                              {plan.icon}
-                              {plan.name}
-                            </h3>
-                            <div className="mt-2">
-                              <span className="text-4xl font-bold text-card-foreground">
-                                {plan.price}
-                              </span>
-                              {plan.originalPrice && (
-                                <span className="text-lg text-muted-foreground line-through ml-2">
-                                  {plan.originalPrice}
-                                </span>
-                              )}
-                              <span className="text-muted-foreground ml-1">
-                                one-time
-                              </span>
-                            </div>
-                          </div>
-                          {plan.badge && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-primary/10 text-primary"
-                            >
-                              {plan.badge}
-                            </Badge>
-                          )}
+              <p className="text-muted-foreground">
+                All plan changes are prorated and applied to your next billing
+                cycle.
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              {subscriptionPlans.map((plan) => {
+                const buttonState = getButtonState(plan);
+
+                return (
+                  <Card
+                    key={plan.planSlug}
+                    className={cn(
+                      "border-border bg-card relative transition-all duration-200 hover:shadow-lg",
+                      plan.highlighted && "ring-2 ring-primary shadow-lg",
+                    )}
+                  >
+                    {plan.badge && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <Badge className="bg-primary text-primary-foreground px-3 py-1">
+                          {plan.badge}
+                        </Badge>
+                      </div>
+                    )}
+
+                    <CardHeader className="pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="text-primary p-2 bg-primary/10 rounded-lg">
+                          {plan.icon}
                         </div>
-                        <CardDescription className="text-muted-foreground pt-2">
+                        <CardTitle className="text-card-foreground text-xl">
+                          {plan.name}
+                        </CardTitle>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-baseline gap-2">
+                          {plan.originalPrice && (
+                            <span className="text-muted-foreground line-through text-lg">
+                              {plan.originalPrice}
+                            </span>
+                          )}
+                          <span className="text-3xl font-bold text-card-foreground">
+                            {plan.price}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {plan.planSlug === "monthly" && "/month"}
+                            {plan.planSlug === "yearly" && "/year"}
+                          </span>
+                        </div>
+                        <CardDescription className="text-base">
                           {plan.description}
                         </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <ul className="space-y-3">
-                          {plan.features.map((feature, i) => (
-                            <li key={i} className="flex items-start">
-                              <Check className="h-5 w-5 text-primary mt-0.5 mr-3 flex-shrink-0" />
-                              <span className="text-card-foreground text-sm">
-                                {feature}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                        <Button
-                          onClick={handleLifetimePurchase}
-                          disabled={buttonState.disabled}
-                          className={cn(
-                            "w-full font-semibold",
-                            buttonState.variant === "default" &&
-                              "bg-primary hover:bg-primary/90 text-primary-foreground",
-                          )}
-                          variant={buttonState.variant}
-                        >
-                          {buttonState.text}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="space-y-6">
+                      <ul className="space-y-3">
+                        {plan.features.map((feature, index) => (
+                          <li key={index} className="flex items-start gap-3">
+                            <Check className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                            <span className="text-card-foreground">
+                              {feature}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <Button
+                        onClick={() => handlePlanChange(plan.planSlug)}
+                        disabled={buttonState.disabled}
+                        variant={buttonState.variant}
+                        className="w-full py-3 text-base font-semibold"
+                        size="lg"
+                      >
+                        {checkoutLoading === plan.planSlug && (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        )}
+                        {buttonState.text}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
 
-          {/* Billing Support */}
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-card-foreground">
-                Billing & Support
-              </CardTitle>
-              <CardDescription>
-                Need help with your purchase or have questions?
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                {hasLifetimeAccess() && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-card-foreground">
-                      Purchase History
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      View your purchase history and download receipts.
-                    </p>
-                    <Button
-                      onClick={handleManageBilling}
-                      disabled={portalLoading}
-                      variant="outline"
-                      className="gap-2 w-full md:w-auto"
-                    >
-                      {portalLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CreditCard className="h-4 w-4" />
-                      )}
-                      Customer Portal
-                    </Button>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <h4 className="font-medium text-card-foreground">
-                    Need Support?
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Have questions about your purchase or need technical help?
-                  </p>
+          {/* Subscription Management */}
+          {hasActiveSubscription() && (
+            <div className="space-y-6">
+              {/* Cancel Subscription Section */}
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground flex items-center gap-2">
+                    <X className="h-5 w-5 text-destructive" />
+                    Cancel Subscription
+                  </CardTitle>
+                  <CardDescription>
+                    You can cancel your subscription at any time. You&apos;ll
+                    continue to have access until the end of your billing
+                    period.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
                   <Button
-                    variant="outline"
-                    className="gap-2 w-full md:w-auto"
-                    onClick={() =>
-                      window.open("mailto:support@example.com", "_blank")
-                    }
+                    onClick={handleManageSubscription}
+                    disabled={portalLoading}
+                    variant="destructive"
+                    size="lg"
+                    className="gap-2"
                   >
-                    Contact Support
+                    {portalLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                    Cancel Subscription
                   </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+
+              {/* Other Actions */}
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground">
+                    Billing & Support
+                  </CardTitle>
+                  <CardDescription>
+                    Manage your billing settings or get help
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-card-foreground">
+                        Manage Billing
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        Update payment methods, view invoices, or change billing
+                        cycle.
+                      </p>
+                      <Button
+                        onClick={handleManageSubscription}
+                        disabled={portalLoading}
+                        variant="outline"
+                        className="gap-2 w-full md:w-auto"
+                      >
+                        {portalLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-4 w-4" />
+                        )}
+                        Customer Portal
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-card-foreground">
+                        Need Support?
+                      </h4>
+                      <p className="text-sm text-muted-foreground">
+                        Have questions about your subscription or need help with
+                        billing?
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="gap-2 w-full md:w-auto"
+                        onClick={() =>
+                          window.open("mailto:support@example.com", "_blank")
+                        }
+                      >
+                        Contact Support
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Footer Note */}
           <div className="text-center py-8 border-t border-border">
             <div className="space-y-2">
               <p className="text-muted-foreground">
-                Lifetime access includes all current and future features.
+                All plan changes are prorated automatically. You&apos;ll only
+                pay the difference.
               </p>
               <p className="text-sm text-muted-foreground">
                 Questions? We&apos;re here to help. Contact our support team
