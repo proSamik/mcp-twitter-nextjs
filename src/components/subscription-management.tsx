@@ -7,7 +7,6 @@ import {
   CreditCard,
   Star,
   Calendar,
-  Gift,
   Loader2,
   ArrowLeft,
 } from "lucide-react";
@@ -72,7 +71,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
   },
 ];
 
-type UserTier = "free" | "monthly" | "yearly";
+type UserTier = "monthly" | "yearly";
 
 interface SubscriptionManagementProps {
   currentTier: UserTier;
@@ -268,9 +267,6 @@ export function SubscriptionManagement({
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {currentTier === "free" && (
-                    <Gift className="h-6 w-6 text-muted-foreground" />
-                  )}
                   {currentTier === "monthly" && (
                     <Star className="h-6 w-6 text-primary" />
                   )}
@@ -282,8 +278,6 @@ export function SubscriptionManagement({
                       {currentTier} Plan
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {currentTier === "free" &&
-                        "Free access to basic features"}
                       {currentTier === "monthly" &&
                         "Monthly billing, cancel anytime"}
                       {currentTier === "yearly" &&
