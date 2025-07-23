@@ -17,6 +17,85 @@ import {
 } from "./actions";
 import { getTwitterCache } from "@/lib/upstash/redis";
 
+// Check and cache subscription state using Redis
+async function checkAndCacheSubscriptionState(userId: string): Promise<{
+  hasValidSubscription: boolean;
+  tier: "monthly" | "yearly";
+  error?: string;
+}> {
+  const cache = getTwitterCache();
+  const cacheKey = `subscription:${userId}`;
+
+  try {
+    // Check cache first (5 minute TTL)
+    const cached = await cache["redis"].get(cacheKey);
+    if (cached) {
+      // Use the private safeParseRedisData method or handle parsing manually
+      const parsed = typeof cached === "string" ? JSON.parse(cached) : cached;
+      return parsed as {
+        hasValidSubscription: boolean;
+        tier: "monthly" | "yearly";
+        error?: string;
+      };
+    }
+
+    // Use the Polar fallback client pattern from the existing codebase
+    const { PolarFallbackClient } = await import("@/lib/polar/client");
+    const polarFallback = new PolarFallbackClient();
+
+    try {
+      // Get customer state using the fallback client
+      const customerState = await polarFallback.getCustomerState(userId, {
+        email: "", // We don't have email in MCP context, but method might still work
+        name: "",
+      });
+
+      if (!customerState) {
+        throw new Error("No customer state available");
+      }
+
+      // Check for active subscriptions
+      const MONTHLY_PRODUCT_ID =
+        process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID;
+      const YEARLY_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID;
+
+      const activeSubscription = customerState.activeSubscriptions?.find(
+        (sub: any) => {
+          return (
+            sub.status === "active" &&
+            (sub.productId === MONTHLY_PRODUCT_ID ||
+              sub.productId === YEARLY_PRODUCT_ID)
+          );
+        },
+      );
+
+      if (!activeSubscription) {
+        throw new Error("No active subscription found");
+      }
+
+      const result: {
+        hasValidSubscription: boolean;
+        tier: "monthly" | "yearly";
+        error?: string;
+      } = {
+        hasValidSubscription: true,
+        tier: (activeSubscription.productId === MONTHLY_PRODUCT_ID
+          ? "monthly"
+          : "yearly") as "monthly" | "yearly",
+      };
+
+      // Cache result for 5 minutes
+      await cache["redis"].setex(cacheKey, 300, JSON.stringify(result));
+      return result;
+    } catch (_polarError) {
+      throw new Error("Could not verify subscription status");
+    }
+  } catch (error) {
+    console.error("Subscription check error:", error);
+    throw new Error("Failed to check subscription status");
+  }
+}
+
 // Production-ready Redis-based rate limiter
 async function checkRateLimit(
   userId: string,
@@ -51,7 +130,29 @@ function createRateLimitResponse(remaining: number, resetTime: number) {
   };
 }
 
-const handler = withMcpAuth(auth, (req, session) => {
+const handler = withMcpAuth(auth, async (req, session) => {
+  // Check subscription once per request and cache the result
+  try {
+    await checkAndCacheSubscriptionState(session.userId);
+  } catch (_error) {
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: {
+          code: -32001,
+          message:
+            "❌ SUBSCRIPTION REQUIRED: This MCP server requires an active monthly or yearly subscription to access premium features. Please upgrade your subscription to continue using the Twitter management tools.",
+        },
+      }),
+      {
+        status: 403,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  }
+
   // session contains the access token record with scopes and user ID
   return createMcpHandler(
     (server) => {
