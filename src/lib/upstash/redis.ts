@@ -139,16 +139,37 @@ export class TwitterRedisCache {
   }
 
   /**
-   * Get all drafts for a user
+   * Get all drafts for a user with secure parsing
    */
   async getUserDrafts(userId: string): Promise<any[]> {
     const pattern = `twitter:draft:${userId}:*`;
-    const keys = await this.redis.keys(pattern);
 
-    if (keys.length === 0) return [];
+    try {
+      const keys = await this.redis.keys(pattern);
 
-    const drafts = await this.redis.mget(...keys);
-    return drafts.filter(Boolean).map((draft) => JSON.parse(draft as string));
+      if (keys.length === 0) return [];
+
+      const drafts = await this.redis.mget(...keys);
+      return drafts
+        .filter(Boolean)
+        .map((draft) => {
+          const parsed = this.safeParseRedisData(draft, true);
+
+          // Additional security check: validate userId matches
+          if (parsed && parsed.userId && parsed.userId !== userId) {
+            console.warn(
+              `Draft cache mismatch: expected ${userId}, got ${parsed.userId}`,
+            );
+            return null;
+          }
+
+          return parsed;
+        })
+        .filter(Boolean); // Remove null values from failed parsing
+    } catch (error) {
+      console.error("Error getting user drafts:", error);
+      return [];
+    }
   }
 
   /**
@@ -214,15 +235,31 @@ export class TwitterRedisCache {
   }
 
   /**
-   * Get and delete OAuth state (one-time use)
+   * Get and delete OAuth state (one-time use) with secure parsing
    */
   async getAndDeleteOAuthState(state: string): Promise<any | null> {
     const key = `oauth:state:${state}`;
-    const data = await this.redis.get(key);
-    if (data) {
-      await this.redis.del(key);
-      return this.safeParseRedisData(data);
+
+    try {
+      const data = await this.redis.get(key);
+      if (data) {
+        await this.redis.del(key);
+        const parsed = this.safeParseRedisData(data, true);
+
+        // Additional security check: validate state matches
+        if (parsed && parsed.state && parsed.state !== state) {
+          console.warn(
+            `OAuth state mismatch: expected ${state}, got ${parsed.state}`,
+          );
+          return null;
+        }
+
+        return parsed;
+      }
+    } catch (error) {
+      console.error("Error getting OAuth state:", error);
     }
+
     return null;
   }
 
@@ -316,12 +353,28 @@ export class TwitterRedisCache {
   }
 
   /**
-   * Get cached user session
+   * Get cached user session with secure parsing
    */
   async getCachedUserSession(sessionId: string): Promise<any | null> {
     const key = `session:${sessionId}`;
-    const data = await this.redis.get(key);
-    return this.safeParseRedisData(data);
+
+    try {
+      const data = await this.redis.get(key);
+      const parsed = this.safeParseRedisData(data, true);
+
+      // Additional security check: validate sessionId matches
+      if (parsed && parsed.sessionId && parsed.sessionId !== sessionId) {
+        console.warn(
+          `Session cache mismatch: expected ${sessionId}, got ${parsed.sessionId}`,
+        );
+        return null;
+      }
+
+      return parsed;
+    } catch (error) {
+      console.error("Error getting cached user session:", error);
+      return null;
+    }
   }
 
   /**
@@ -365,11 +418,16 @@ export class TwitterRedisCache {
   }
 
   /**
-   * Get temporary data
+   * Get temporary data with secure parsing
    */
   async getTemporary(key: string): Promise<any | null> {
-    const data = await this.redis.get(`temp:${key}`);
-    return this.safeParseRedisData(data);
+    try {
+      const data = await this.redis.get(`temp:${key}`);
+      return this.safeParseRedisData(data, true);
+    } catch (error) {
+      console.error("Error getting temporary data:", error);
+      return null;
+    }
   }
 
   /**
