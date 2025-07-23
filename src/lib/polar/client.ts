@@ -132,21 +132,97 @@ export class PolarFallbackClient {
   }
 
   /**
-   * Get customer state information
+   * Get customer state information including subscriptions
    * @param externalCustomerId - The Better Auth user ID
    * @param userData - User data from Better Auth session
-   * @returns Customer state information
+   * @returns Customer state information with subscriptions
    */
   async getCustomerState(
     externalCustomerId: string,
     userData?: { email?: string; name?: string },
-  ): Promise<PolarCustomerSession["customer"]> {
+  ): Promise<any> {
     try {
+      // First create/get customer session
       const session = await this.createCustomerSession(
         externalCustomerId,
         userData,
       );
-      return session.customer;
+
+      // Then get the full customer details including subscriptions
+      if (session.customer_id) {
+        try {
+          const customer = await this.polarClient.customers.get({
+            id: session.customer_id,
+          });
+
+          console.log("Full customer data:", JSON.stringify(customer, null, 2));
+
+          // Get subscriptions for this customer
+          const subscriptionsResponse =
+            (await this.polarClient.subscriptions.list({
+              customerId: session.customer_id,
+            })) as any;
+
+          console.log(
+            "Raw subscriptions response:",
+            JSON.stringify(subscriptionsResponse, null, 2),
+          );
+
+          // Extract subscriptions from the response structure
+          let subscriptions: any[] = [];
+
+          // Try different ways to access the subscriptions data
+          if (subscriptionsResponse?.result?.items) {
+            subscriptions = subscriptionsResponse.result.items;
+            console.log(
+              "Found subscriptions in result.items:",
+              subscriptions.length,
+            );
+          } else if (subscriptionsResponse?.items) {
+            subscriptions = subscriptionsResponse.items;
+            console.log("Found subscriptions in items:", subscriptions.length);
+          } else {
+            // Try PageIterator approach
+            console.log("Trying PageIterator approach...");
+            for await (const subscription of subscriptionsResponse) {
+              subscriptions.push(subscription);
+            }
+            console.log("PageIterator result:", subscriptions.length);
+          }
+
+          console.log(
+            "All subscriptions:",
+            JSON.stringify(subscriptions, null, 2),
+          );
+
+          // Return customer data with activeSubscriptions like Better Auth does
+          const activeSubscriptions = subscriptions.filter(
+            (sub: any) => sub.status === "active",
+          );
+          console.log(
+            "Filtered active subscriptions:",
+            JSON.stringify(activeSubscriptions, null, 2),
+          );
+
+          return {
+            ...customer,
+            activeSubscriptions: activeSubscriptions,
+          };
+        } catch (apiError) {
+          console.error("Failed to get detailed customer data:", apiError);
+          // Fallback to session customer data
+          return {
+            ...session.customer,
+            activeSubscriptions: [],
+          };
+        }
+      }
+
+      // Fallback to session customer data
+      return {
+        ...session.customer,
+        activeSubscriptions: [],
+      };
     } catch (error) {
       console.error("Failed to get customer state:", error);
       throw new Error(
