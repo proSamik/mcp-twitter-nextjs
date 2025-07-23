@@ -1,11 +1,10 @@
 "use client";
 
 import { Check, Star } from "lucide-react";
-import { authClient, enhancedAuthClient } from "auth/client";
-import { useState, useEffect, useRef } from "react";
+import { authClient } from "auth/client";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
-import { useStateWithBrowserStorage } from "@/hooks/use-state-with-browserstorage";
 
 interface PricingTier {
   name: string;
@@ -16,100 +15,79 @@ interface PricingTier {
   cta: string;
   highlighted?: boolean;
   badge?: string;
-  planSlug?: "free" | "lifetime";
+  planSlug?: "free" | "monthly" | "yearly";
 }
 
 const pricingTiers: PricingTier[] = [
   {
     name: "Free",
     price: "Free",
-    description: "Perfect for getting started with basic features",
+    description: "Perfect for personal projects and learning",
     features: [
-      "5 lead magnet forms",
-      "30-day analytics history",
-      "1 project dashboard",
+      "Complete source code access",
+      "Basic authentication setup",
+      "Database schema & migrations",
+      "Tailwind CSS components",
+      "Docker configuration",
+      "MIT License",
     ],
-    cta: "Get started for free",
+    cta: "Get Started Free",
     planSlug: "free",
   },
   {
-    name: "Lifetime",
-    price: "$49",
-    originalPrice: "$199",
-    description: "One-time payment, lifetime access to everything",
+    name: "Monthly",
+    price: "$19",
+    description: "Best for trying premium features",
     features: [
-      "Everything in Free, plus:",
-      "Unlimited analytics events",
-      "Unlimited lead magnet forms",
-      "Unlimited subscribers",
-      "Unlimited time tracking",
-      "Unlimited link variations for tracking",
-      "Unlimited project dashboards",
+      "Everything in Free",
+      "Polar.sh payment integration",
+      "Advanced auth configurations",
+      "Premium UI components",
       "Email templates & automation",
       "Priority support",
-      "Lifetime updates",
+      "Commercial license",
     ],
-    cta: "Get Lifetime Access",
+    cta: "Start Monthly Plan",
+    planSlug: "monthly",
+  },
+  {
+    name: "Yearly",
+    price: "$180",
+    originalPrice: "$228",
+    description: "Best value for ongoing projects",
+    features: [
+      "Everything in Monthly",
+      "20% yearly discount",
+      "Extended support",
+      "Early access to new features",
+      "Advanced documentation",
+      "Priority bug fixes",
+      "Team collaboration tools",
+    ],
+    cta: "Get Yearly Plan",
     highlighted: true,
-    badge: "75% OFF - Limited Time",
-    planSlug: "lifetime",
+    badge: "Best Value",
+    planSlug: "yearly",
   },
 ];
 
 export function PricingSection() {
   const { data: session, isPending: sessionLoading } = authClient.useSession();
+  const [customerState, _setCustomerState] = useState<any>(null);
+  const [isLoadingState, setIsLoadingState] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const searchParams = useSearchParams();
-  const fetchInitiated = useRef(false);
 
-  // Cache lifetime orders for 7 days
-  const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
-  const [lifetimeOrders, setLifetimeOrders] = useStateWithBrowserStorage<any[]>(
-    `lifetime-orders-${session?.user?.id}`,
-    [],
-    sevenDaysInMs,
-  );
-
-  const [isLoadingState, setIsLoadingState] = useState(false);
-
-  const fetchLifetimeOrders = async () => {
+  const fetchCustomerState = async () => {
     if (!session?.user) {
-      setIsLoadingState(false);
-      return;
-    }
-
-    // Skip fetch if cache is already populated
-    if (lifetimeOrders && lifetimeOrders.length > 0) {
       setIsLoadingState(false);
       return;
     }
 
     setIsLoadingState(true);
     try {
-      // Fetch lifetime orders with automatic fallback
-      const ordersResponse = await enhancedAuthClient.customer.orders.list({
-        query: {
-          page: 1,
-          limit: 10,
-          productBillingType: "one_time",
-        },
-      });
-
-      // Check if the response from the enhanced client is valid.
-      const ordersData =
-        (ordersResponse as any)?.data?.result?.items ||
-        (ordersResponse as any)?.data?.items;
-
-      // If ordersData is undefined (not null or empty array), it means the call failed silently.
-      if (ordersData === undefined) {
-        console.warn(
-          "Enhanced client did not return a valid data structure, triggering manual fallback.",
-        );
-        throw new Error(
-          "Silent failure from enhanced client: Invalid data structure.",
-        );
-      }
-      setLifetimeOrders(ordersData || []);
+      // Fetch customer state first
+      await authClient.customer.state();
     } catch (error) {
       // This catch block will now be triggered by our manual throw
       // or by a genuine error from the authClient.
@@ -117,57 +95,32 @@ export function PricingSection() {
         "Initiating direct fallback for orders due to error:",
         error,
       );
-      try {
-        const fallbackRes = await fetch(
-          "/api/polar-fallback/orders?page=1&limit=10&productBillingType=one_time",
-          {
-            method: "GET",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-          },
-        );
-
-        if (!fallbackRes.ok) {
-          throw new Error(
-            `Fallback API responded with status: ${fallbackRes.status}`,
-          );
-        }
-        const fallbackJson = await fallbackRes.json();
-        const fallbackOrders = fallbackJson?.data?.items || [];
-        setLifetimeOrders(fallbackOrders);
-      } catch (fallbackError) {
-        console.error("Direct fallback for orders also failed:", fallbackError);
-        setLifetimeOrders([]);
-      }
     } finally {
       setIsLoadingState(false);
     }
   };
 
-  // Fetch lifetime orders when user is authenticated
+  // Fetch customer state when user is authenticated
   useEffect(() => {
-    if (session?.user && !fetchInitiated.current) {
-      fetchInitiated.current = true;
-      fetchLifetimeOrders();
+    if (session?.user) {
+      fetchCustomerState();
     }
   }, [session]);
 
-  // Refetch lifetime orders if coming back from successful checkout
+  // Refetch customer state if coming back from successful checkout
   useEffect(() => {
     const checkoutSuccess = searchParams.get("checkout_success");
     if (checkoutSuccess === "true" && session?.user) {
-      // Clear cache to force refetch after successful purchase
-      const storageKey = `lifetime-orders-${session.user.id}`;
-      localStorage.removeItem(`NEXTJS-STARTER-${storageKey}`);
-
       // Refetch after a delay to ensure Polar has processed the payment
       setTimeout(() => {
-        fetchLifetimeOrders();
+        fetchCustomerState();
       }, 1000);
     }
   }, [searchParams, session]);
 
-  const handleCheckout = async (planSlug: "free" | "lifetime") => {
+  const handleCheckout = async (
+    planSlug: "free" | "monthly" | "yearly" | "lifetime",
+  ) => {
     // Handle free plan - just redirect to dashboard
     if (planSlug === "free") {
       if (!session?.user) {
@@ -184,18 +137,47 @@ export function PricingSection() {
       return;
     }
 
+    // Check if user already has an active subscription or lifetime access
+    // Only check if we have customer state (customer exists in Polar)
+    if (customerState) {
+      // Get product IDs from environment
+      const MONTHLY_PRODUCT_ID =
+        process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID;
+      const YEARLY_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID;
+
+      const hasActiveSubscription = customerState?.activeSubscriptions?.some(
+        (sub: any) =>
+          sub.status === "active" &&
+          (sub.productId === MONTHLY_PRODUCT_ID ||
+            sub.productId === YEARLY_PRODUCT_ID),
+      );
+
+      // Prevent downgrading or duplicate subscriptions
+      if (
+        hasActiveSubscription &&
+        (planSlug === "monthly" || planSlug === "yearly")
+      ) {
+        toast.info(
+          "You already have an active subscription. You can manage it in your dashboard.",
+        );
+        return;
+      }
+
+      // Allow upgrading to lifetime even with existing subscription
+      if (hasActiveSubscription && planSlug === "lifetime") {
+        toast.info(
+          "Upgrading to lifetime will replace your current subscription.",
+        );
+      }
+    }
+
     try {
       setCheckoutLoading(planSlug);
 
-      await authClient.checkout({
-        products: [process.env.NEXT_PUBLIC_POLAR_LIFETIME_PRODUCT_ID || ""],
-        slug: "lifetime",
-      });
+      // Use customer portal for changing plans
+      await authClient.customer.portal();
     } catch (error: any) {
-      // Provide more specific error messages
-      if (error?.message?.includes("ResourceNotFound")) {
-        toast.error("Product not found. Please contact support.");
-      } else if (error?.message?.includes("Unauthorized")) {
+      if (error?.message?.includes("Unauthorized")) {
         toast.error("Please sign in again and try checkout.");
       } else {
         toast.error("Failed to start checkout. Please try again.");
@@ -213,33 +195,60 @@ export function PricingSection() {
     }
 
     if (!session?.user) {
-      if (tier.planSlug === "free") {
-        return { disabled: false, text: "Get started for free" };
+      return { disabled: false, text: "Sign In to Purchase" };
+    }
+
+    if (customerState) {
+      // Get product IDs from environment
+      const MONTHLY_PRODUCT_ID =
+        process.env.NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID;
+      const YEARLY_PRODUCT_ID = process.env.NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID;
+
+      const hasActiveSubscription = customerState?.activeSubscriptions?.some(
+        (sub: any) =>
+          sub.status === "active" &&
+          (sub.productId === MONTHLY_PRODUCT_ID ||
+            sub.productId === YEARLY_PRODUCT_ID),
+      );
+
+      // Handle different subscription states
+      if (hasActiveSubscription) {
+        // Check which specific subscription is active
+        const activeMonthlySubscription =
+          customerState?.activeSubscriptions?.find(
+            (sub: any) =>
+              sub.status === "active" && sub.productId === MONTHLY_PRODUCT_ID,
+          );
+        const activeYearlySubscription =
+          customerState?.activeSubscriptions?.find(
+            (sub: any) =>
+              sub.status === "active" && sub.productId === YEARLY_PRODUCT_ID,
+          );
+
+        // Show "Currently Active" only for the actual active subscription
+        if (tier.planSlug === "monthly" && activeMonthlySubscription) {
+          return { disabled: true, text: "Currently Active" };
+        }
+        if (tier.planSlug === "yearly" && activeYearlySubscription) {
+          return { disabled: true, text: "Currently Active" };
+        }
+
+        // For non-active subscriptions, show change plan options
+        if (tier.planSlug === "monthly" && activeYearlySubscription) {
+          return { disabled: false, text: "Change Plan" };
+        }
+        if (tier.planSlug === "yearly" && activeMonthlySubscription) {
+          return { disabled: false, text: "Upgrade to Yearly" };
+        }
       }
-      return { disabled: false, text: "Get Started" };
-    }
 
-    // Check for lifetime access
-    const hasLifetimeAccess = lifetimeOrders.length > 0;
-
-    if (hasLifetimeAccess && tier.planSlug === "lifetime") {
-      return {
-        disabled: false,
-        text: "Go to App",
-        action: () => (window.location.href = "/app"),
-      };
-    }
-
-    if (hasLifetimeAccess && tier.planSlug === "free") {
-      return { disabled: true, text: "You have Lifetime Access" };
-    }
-
-    // Free plan is always available for non-lifetime users
-    if (tier.planSlug === "free") {
-      return {
-        disabled: false,
-        text: session?.user ? "Go to App" : "Sign In to Start",
-      };
+      // Free plan is always available
+      if (tier.planSlug === "free") {
+        return {
+          disabled: false,
+          text: session?.user ? "Go to Dashboard" : "Sign In to Start",
+        };
+      }
     }
 
     if (checkoutLoading === tier.planSlug) {
@@ -255,19 +264,19 @@ export function PricingSection() {
         <div className="text-center mb-20">
           <div className="inline-flex items-center px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium mb-12">
             <Star className="h-4 w-4 mr-2" />
-            Complete Lead Generation Starter Kit
+            Complete Next.js Starter Kit
           </div>
 
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-8">
-            Choose Your Plan
+            Choose Your Development Package
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Start with our free plan or get lifetime access to all premium
-            features. Perfect for building powerful lead generation systems.
+            From open source basics to enterprise-ready features. Start building
+            your SaaS application with the tools you need.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
           {pricingTiers.map((tier, _index) => {
             const buttonState = getButtonState(tier);
 
@@ -278,7 +287,7 @@ export function PricingSection() {
                   tier.highlighted
                     ? "border-primary shadow-lg scale-105"
                     : "border-border"
-                } p-8 flex flex-col`}
+                } p-8`}
               >
                 {tier.badge && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
@@ -301,17 +310,17 @@ export function PricingSection() {
                     <span className="text-4xl font-bold text-card-foreground">
                       {tier.price}
                     </span>
-                    {tier.name === "Lifetime" && (
-                      <span className="text-muted-foreground ml-1">
-                        {" "}
-                        one-time
-                      </span>
+                    {tier.name === "Monthly" && (
+                      <span className="text-muted-foreground ml-1">/month</span>
+                    )}
+                    {tier.name === "Yearly" && (
+                      <span className="text-muted-foreground ml-1">/year</span>
                     )}
                   </div>
                   <p className="text-muted-foreground">{tier.description}</p>
                 </div>
 
-                <ul className="space-y-4 mb-8">
+                <ul className="space-y-6 mb-8">
                   {tier.features.map((feature, featureIndex) => (
                     <li key={featureIndex} className="flex items-start">
                       <Check className="h-5 w-5 text-primary mt-0.5 mr-3 flex-shrink-0" />
@@ -322,18 +331,14 @@ export function PricingSection() {
                   ))}
                 </ul>
 
-                <div className="mt-auto pt-8">
+                <div className="text-center">
                   {tier.planSlug ? (
                     <button
-                      onClick={() => {
-                        if (buttonState.action) {
-                          buttonState.action();
-                        } else if (!session?.user) {
-                          window.location.href = "/sign-in";
-                        } else {
-                          handleCheckout(tier.planSlug!);
-                        }
-                      }}
+                      onClick={() =>
+                        !session?.user
+                          ? (window.location.href = "/sign-in")
+                          : handleCheckout(tier.planSlug!)
+                      }
                       disabled={buttonState.disabled}
                       className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors ${
                         buttonState.disabled
@@ -351,7 +356,7 @@ export function PricingSection() {
                       onClick={() => {
                         if (tier.name === "Free") {
                           window.open(
-                            "https://github.com/cgoinglove/nextjs-polar-starter-kit",
+                            "https://github.com/prosamik/mcp-twitter-nextjs",
                             "_blank",
                           );
                         } else {
@@ -364,8 +369,10 @@ export function PricingSection() {
                   )}
                   <p className="text-sm text-muted-foreground mt-3">
                     {tier.name === "Free"
-                      ? "No credit card required"
-                      : "One-time payment, lifetime access"}
+                      ? "MIT License, no restrictions"
+                      : tier.name === "Monthly"
+                        ? "Cancel anytime, no long-term commitment"
+                        : "Annual billing, 20% savings"}
                   </p>
                 </div>
               </div>
@@ -375,7 +382,7 @@ export function PricingSection() {
 
         <div className="text-center mt-20">
           <p className="text-lg text-muted-foreground mb-8">
-            All plans include documentation, examples, and community support
+            All packages include documentation, examples, and community support
           </p>
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
             <div className="flex items-center text-sm text-muted-foreground">
@@ -388,7 +395,7 @@ export function PricingSection() {
             </div>
             <div className="flex items-center text-sm text-muted-foreground">
               <Check className="h-4 w-4 text-primary mr-2" />
-              Lifetime updates
+              Regular updates
             </div>
           </div>
         </div>
