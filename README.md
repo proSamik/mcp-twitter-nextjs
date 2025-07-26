@@ -1,8 +1,10 @@
 # MCP Twitter Manager - AI-Powered Twitter/X Management Platform
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/your-username/mcp-twitter-nextjs&env=BETTER_AUTH_SECRET&env=POLAR_ACCESS_TOKEN&env=UPSTASH_REDIS_REST_URL&env=UPSTASH_REDIS_REST_TOKEN&env=UPSTASH_QSTASH_URL&env=UPSTASH_QSTASH_TOKEN&envDescription=Learn+more+about+how+to+get+the+API+Keys+for+the+application&envLink=https://github.com/your-username/mcp-twitter-nextjs/blob/main/.env.example&demo-title=MCP+Twitter+Manager&demo-description=AI-powered+Twitter/X+management+platform+with+Claude+MCP+integration.&products=[{"type":"integration","protocol":"storage","productSlug":"neon","integrationSlug":"neon"}])
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/prosamik/mcp-twitter-nextjs&env=BETTER_AUTH_SECRET&env=BETTER_AUTH_URL&env=NEXT_PUBLIC_APP_URL&env=POSTGRES_URL&env=UPSTASH_REDIS_REST_URL&env=UPSTASH_REDIS_REST_TOKEN&env=QSTASH_URL&env=QSTASH_TOKEN&env=QSTASH_CURRENT_SIGNING_KEY&env=QSTASH_NEXT_SIGNING_KEY&env=POLAR_ACCESS_TOKEN&env=NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID&env=NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID&env=GOOGLE_CLIENT_ID&env=GOOGLE_CLIENT_SECRET&env=DISABLE_SIGN_UP&env=NO_HTTPS&env=PLUNK_SECRET_KEY&env=MCP_SERVER_NAME&env=MCP_SERVER_VERSION&env=R2_ACCOUNT_ID&env=R2_ACCESS_KEY_ID&env=R2_SECRET_ACCESS_KEY&env=R2_BUCKET_NAME&env=R2_PUBLIC_URL&envDescription=Learn+more+about+how+to+get+the+API+Keys+for+the+application&envLink=https://github.com/prosamik/mcp-twitter-nextjs/blob/main/.env.example&demo-title=MCP+Twitter+Manager&demo-description=AI-powered+Twitter/X+management+platform+with+Claude+MCP+integration.&products=[{"type":"integration","protocol":"storage","productSlug":"neon","integrationSlug":"neon"}])
 
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/prosamik?style=for-the-badge&logo=github&logoColor=white&labelColor=black&color=pink)](https://github.com/sponsors/prosamik)
+
+# The Ultimate MCP SaaS Starter Kit which works for normal SaaS also
 
 **The ultimate AI-powered Twitter/X management platform with Claude MCP integration, OAuth 2.0 authentication, and comprehensive social media automation.**
 
@@ -23,6 +25,7 @@
 - **MCP Server** - Full Model Context Protocol implementation with Twitter management tools
 - **AI-Powered Content** - Generate, optimize, and schedule tweets with Claude's assistance
 - **Real-time Synchronization** - WebSocket support for live updates across all clients
+- **Vercel MCP Adapter** - Seamless integration with Vercel's MCP ecosystem
 
 ### 🐦 Advanced Twitter Management
 - **User OAuth Credentials** - Users provide their own Twitter Developer credentials for enhanced security
@@ -31,12 +34,15 @@
 - **Thread Creation** - Build and schedule complex tweet threads with ease
 - **Bulk Operations** - Schedule hundreds of tweets with batch processing
 - **Analytics Integration** - Track impressions, engagement, and performance metrics
+- **Media Upload** - Support for images, videos, and GIFs with Cloudflare R2 storage
+- **Tweet Embedding** - Rich tweet previews and embedded content
 
 ### ⏰ Intelligent Scheduling
 - **Timezone-Aware Posting** - Schedule tweets for optimal engagement across time zones
 - **Retry Logic** - Automatic retry for failed posts with exponential backoff
 - **Queue Management** - Visual queue management with drag-and-drop reordering
 - **Performance Optimization** - AI-suggested optimal posting times
+- **Calendar Integration** - Visual calendar interface for tweet scheduling
 
 ### 🔐 Enterprise Security
 - **OAuth 2.0 MCP Server** - Industry-standard authentication for Claude
@@ -45,15 +51,30 @@
 - **Rate Limiting** - Intelligent rate limiting to respect Twitter API limits
 - **Session Management** - Secure 7-day sessions with automatic refresh
 - **Credential Encryption** - AES-256-CBC encryption for Twitter client secrets
+- **Subscription Validation** - Secure payment verification and access control
+
+### 🌐 Internationalization
+- **Multi-Language Support** - Built-in support for English, French, Spanish, Chinese, Hindi, Japanese, Korean
+- **Locale Management** - Automatic language detection and switching
+- **Translation System** - Comprehensive translation files and utilities
+
+### 🎨 Rich User Experience
+- **20+ Premium Themes** - Beautiful, customizable interface with dark mode support
+- **Advanced UI Components** - Rich text editor, image cropping, drag-and-drop interfaces
+- **Real-time Updates** - Live notifications and status updates
+- **Responsive Design** - Mobile-first approach with touch-friendly interfaces
+- **Accessibility** - WCAG compliant components and keyboard navigation
 
 ## 🏗️ Tech Stack
 
 ### Frontend & Framework
 - **Next.js 15** - React framework with App Router and Turbopack
 - **TypeScript** - Full type safety with strict mode
-- **Tailwind CSS** - Utility-first CSS framework
+- **Tailwind CSS 4** - Latest utility-first CSS framework
 - **shadcn/ui** - Modern, accessible component library
 - **Biome** - Fast linting and formatting
+- **Framer Motion** - Smooth animations and transitions
+- **React Hook Form** - Performant form handling
 
 ### Backend & API
 - **Twitter API v2** - Complete Twitter/X integration with node-twitter-api-v2
@@ -65,8 +86,10 @@
 ### Infrastructure & Services
 - **Upstash Redis** - High-performance caching and session storage
 - **Upstash QStash** - Reliable message queuing for tweet scheduling
+- **Cloudflare R2** - Object storage for media uploads
 - **Polar.sh** - Modern payment processing
 - **Vercel** - Seamless deployment and hosting
+- **Socket.io** - Real-time WebSocket communication
 
 ## 🚀 Quick Start
 
@@ -83,7 +106,7 @@ node --version
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/your-username/mcp-twitter-nextjs.git
+git clone https://github.com/prosamik/mcp-twitter-nextjs.git
 cd mcp-twitter-nextjs
 pnpm install
 ```
@@ -102,14 +125,11 @@ pnpm initial:env
 
 #### 🔐 Authentication (Required)
 ```env
-BETTER_AUTH_SECRET=your-super-secret-key-here-32-characters-min
-BETTER_AUTH_URL=http://localhost:3000  # Update for production
-```
-
-#### 💳 Payments (Required)
-```env
-POLAR_ACCESS_TOKEN=polar_at_xxxxxxxxxxxxx
-POLAR_LIFETIME_PRODUCT_ID=prod_xxxxxxxxxxxxx
+# Secret for Better Auth (generate with: npx @better-auth/cli@latest secret)
+BETTER_AUTH_SECRET=your-super-secret-key-here-make-it-long-and-random-32-chars-min
+# URL for Better Auth (the URL you access the app from)
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 #### 🗄️ Database (Required)
@@ -118,7 +138,7 @@ POLAR_LIFETIME_PRODUCT_ID=prod_xxxxxxxxxxxxx
 POSTGRES_URL=postgres://postgres:password@localhost:5432/mcp_twitter
 
 # Production (NeonDB recommended)
-POSTGRES_URL=postgresql://username:password@your-db.neon.tech/db?sslmode=require
+POSTGRES_URL=postgresql://username:password@ep-cool-darkness-123456.us-east-2.aws.neon.tech/neondb?sslmode=require
 ```
 
 #### 🐦 Twitter Integration (User-Provided)
@@ -127,16 +147,57 @@ No Twitter environment variables are required - users bring their own developer 
 
 #### ⏰ Upstash Services (Required)
 ```env
+# Redis for caching
 UPSTASH_REDIS_REST_URL=https://your-redis-endpoint.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-redis-token
-UPSTASH_QSTASH_URL=https://qstash.upstash.io
-UPSTASH_QSTASH_TOKEN=your-qstash-token
+UPSTASH_REDIS_REST_TOKEN=your_redis_rest_token_here
+
+# QStash for tweet scheduling
+QSTASH_URL=https://qstash.upstash.io
+QSTASH_TOKEN=your_qstash_token_here
+QSTASH_CURRENT_SIGNING_KEY=your_qstash_signing_key_here
+QSTASH_NEXT_SIGNING_KEY=your_qstash_next_signing_key_here
+```
+
+#### 💳 Payments (Required)
+```env
+# Get these from https://polar.sh
+POLAR_ACCESS_TOKEN=polar_at_your_access_token_here
+NEXT_PUBLIC_POLAR_MONTHLY_PRODUCT_ID=your_monthly_product_id
+NEXT_PUBLIC_POLAR_YEARLY_PRODUCT_ID=your_yearly_product_id
 ```
 
 #### 🌐 OAuth Providers (Optional)
 ```env
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
+# Google OAuth (optional but recommended)
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+```
+
+#### ☁️ Cloudflare R2 Storage (Required for media uploads)
+```env
+# Get these from Cloudflare R2 dashboard
+R2_ACCOUNT_ID=your_cloudflare_account_id_here
+R2_ACCESS_KEY_ID=your_r2_access_key_id_here
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key_here
+R2_BUCKET_NAME=your_r2_bucket_name_here
+# Optional: Custom domain for R2 bucket
+R2_PUBLIC_URL=https://your-custom-domain.com
+```
+
+#### ⚙️ Optional Settings
+```env
+# Disable user registration (default: false)
+DISABLE_SIGN_UP=false
+
+# Allow non-HTTPS cookies for local development
+NO_HTTPS=true
+
+# Email service (optional)
+PLUNK_SECRET_KEY=your_plunk_api_key_here
+
+# MCP Server Configuration (optional)
+MCP_SERVER_NAME=twitter-mcp-server
+MCP_SERVER_VERSION=1.0.0
 ```
 
 ### 4. Database Setup
@@ -318,7 +379,7 @@ Access theme settings in the sidebar under Settings.
 ### Vercel (Recommended)
 
 1. **Deploy with one click:**
-   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/your-username/mcp-twitter-nextjs)
+   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/prosamik/mcp-twitter-nextjs)
 
 2. **Configure environment variables** in Vercel dashboard
 
@@ -401,16 +462,27 @@ mcp-twitter-nextjs/
 │   ├── 📁 components/         # React components
 │   │   ├── 📁 ui/             # Reusable components
 │   │   ├── 📁 twitter/        # Twitter components
-│   │   └── 📁 layouts/        # Layout components
+│   │   ├── 📁 layouts/        # Layout components
+│   │   ├── 📁 landing/        # Landing page components
+│   │   └── 📁 magicui/        # Magic UI components
 │   ├── 📁 lib/                # Core libraries
 │   │   ├── 📁 auth/           # Authentication + OAuth credentials
 │   │   ├── 📁 db/             # Database operations + repositories
 │   │   ├── 📁 twitter/        # Twitter API with user credentials
-│   │   └── 📁 upstash/        # Redis & QStash
-│   ├── 📁 hooks/              # Custom hooks
+│   │   ├── 📁 upstash/        # Redis & QStash
+│   │   ├── 📁 polar/          # Payment integration
+│   │   ├── 📁 r2/             # Cloudflare R2 storage
+│   │   ├── 📁 security/       # Security & validation
+│   │   ├── 📁 websocket/      # Real-time communication
+│   │   ├── 📁 planner/        # Content planning tools
+│   │   ├── 📁 plunk/          # Email service
+│   │   └── 📁 cache/          # Caching utilities
+│   ├── 📁 hooks/              # Custom React hooks
+│   ├── 📁 i18n/               # Internationalization
 │   └── 📁 types/              # TypeScript types
 ├── 📁 scripts/                # Build scripts
 ├── 📁 docker/                 # Docker config
+├── 📁 messages/               # Translation files
 ├── .cursorrules               # Development rules
 ├── CLAUDE.md                  # Claude instructions
 └── README.md                  # This file
@@ -442,7 +514,30 @@ POST /api/twitter/tweets          # Create tweet
 PUT  /api/twitter/tweets/:id      # Update tweet
 DELETE /api/twitter/tweets/:id    # Delete tweet
 POST /api/twitter/schedule        # Schedule tweet
+GET  /api/twitter/usage           # Usage tracking
 GET  /api/auth/twitter/callback   # OAuth callback with error handling
+```
+
+### Media Management
+```
+POST /api/media/upload            # Upload media files
+GET  /api/media/[key]             # Serve media files
+DELETE /api/media/delete          # Delete media files
+```
+
+### Community Management
+```
+GET  /api/communities             # List communities
+GET  /api/communities/[id]        # Get community details
+POST /api/communities             # Create community
+PUT  /api/communities/[id]        # Update community
+DELETE /api/communities/[id]      # Delete community
+```
+
+### Webhooks & Integrations
+```
+POST /api/webhooks/qstash/tweet   # QStash webhook for scheduled tweets
+POST /api/polar-fallback/portal   # Polar payment portal fallback
 ```
 
 ### MCP Server
@@ -474,8 +569,8 @@ We welcome contributions! Please follow these steps:
 ## 📧 Support & Community
 
 - **Documentation**: Comprehensive guides in `/docs`
-- **Issues**: [GitHub Issues](https://github.com/your-username/mcp-twitter-nextjs/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/mcp-twitter-nextjs/discussions)
+- **Issues**: [GitHub Issues](https://github.com/prosamik/mcp-twitter-nextjs/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/prosamik/mcp-twitter-nextjs/discussions)
 - **Discord**: Join our [Discord community](https://discord.gg/your-server)
 
 ## 🔒 Security
