@@ -44,7 +44,7 @@ export interface AppState {
     avatar?: string;
     subscription?: {
       status: "active" | "inactive" | "trial" | "canceled";
-      plan: "lifetime";
+      plan: "monthly" | "yearly";
       expiresAt?: string;
     };
   };
