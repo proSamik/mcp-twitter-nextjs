@@ -35,8 +35,8 @@ export function ProblemSolutionSection() {
   const solutions = [
     {
       icon: <IconCheck className="h-8 w-8 text-green-500" />,
-      title: "One‑time purchase",
-      description: "lifetime access",
+      title: "Affordable pricing",
+      description: "starting at $3/month",
       highlight: true,
     },
     {

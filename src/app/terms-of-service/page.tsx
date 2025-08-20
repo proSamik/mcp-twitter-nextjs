@@ -162,8 +162,11 @@ export default function TermsOfServicePage() {
                   restrictions
                 </li>
                 <li>
-                  <strong>Lifetime Plan:</strong> One-time payment for unlimited
-                  access
+                  <strong>Monthly Plan:</strong> $3/month for unlimited features
+                </li>
+                <li>
+                  <strong>Yearly Plan:</strong> $30/year (pay for 10 months
+                  only)
                 </li>
               </ul>
               <p className="text-gray-700 leading-relaxed">

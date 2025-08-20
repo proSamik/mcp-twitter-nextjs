@@ -101,7 +101,9 @@ export function HeroSection() {
                   <br />
                 </span>
                 Automate your social media presence with AI-powered insights and{" "}
-                <span className="font-bold text-amber-500">lifetime access</span>{" "}
+                <span className="font-bold text-amber-500">
+                  unlimited scheduling
+                </span>{" "}
                 <IconSparkles className="inline-block h-5 w-5 text-amber-500" />
               </p>
             </div>
