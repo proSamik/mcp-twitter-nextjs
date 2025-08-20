@@ -54,7 +54,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Scheduling**: Upstash QStash for reliable tweet scheduling
 - **Caching**: Upstash Redis for high-performance data caching
 - **Authentication**: Better Auth with Google OAuth + Twitter OAuth support
-- **Payments**: Polar.sh for lifetime deals and one-time payments
+- **Payments**: Polar.sh for subscription management ($3/month, $30/year)
 - **Database**: PostgreSQL with Drizzle ORM (TypeScript-first)
 - **Styling**: Tailwind CSS with 20+ theme variants
 - **Code Quality**: Biome for linting/formatting, TypeScript strict mode
@@ -103,9 +103,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - OAuth credential encryption using AES-256-CBC with BETTER_AUTH_SECRET
 
 ### Payment Integration (Polar.sh)
-- One-time payments for lifetime access
+- Monthly subscription ($3/month) and yearly subscription ($30/year)
 - Automatic customer creation and linking
-- Environment variables: `POLAR_ACCESS_TOKEN`, `POLAR_LIFETIME_PRODUCT_ID`
+- Environment variables: `POLAR_ACCESS_TOKEN`, `POLAR_MONTHLY_PRODUCT_ID`, `POLAR_YEARLY_PRODUCT_ID`
 
 ## Development Patterns
 

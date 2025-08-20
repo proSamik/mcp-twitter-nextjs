@@ -11,7 +11,6 @@ Add these to your `.env` file:
 POLAR_ACCESS_TOKEN=your_polar_access_token_here
 POLAR_MONTHLY_PRODUCT_ID=your_monthly_product_id
 POLAR_YEARLY_PRODUCT_ID=your_yearly_product_id
-POLAR_LIFETIME_PRODUCT_ID=your_lifetime_product_id
 
 # Optional: Webhook secret (for production)
 POLAR_WEBHOOK_SECRET=your_webhook_secret
@@ -35,19 +34,14 @@ Create three products in your Polar dashboard:
 #### Monthly Subscription
 - **Type**: Subscription
 - **Billing Interval**: Monthly
-- **Price**: $19/month (or your preferred price)
+- **Price**: $3/month
 - Copy the Product ID and set as `POLAR_MONTHLY_PRODUCT_ID`
 
 #### Yearly Subscription
 - **Type**: Subscription
 - **Billing Interval**: Yearly
-- **Price**: $180/year (or your preferred price - should be discounted vs monthly)
+- **Price**: $30/year (pay for 10 months only)
 - Copy the Product ID and set as `POLAR_YEARLY_PRODUCT_ID`
-
-#### Lifetime Deal
-- **Type**: One-time purchase
-- **Price**: $299 (or your preferred price)
-- Copy the Product ID and set as `POLAR_LIFETIME_PRODUCT_ID`
 
 ### 4. Environment Configuration
 
@@ -81,7 +75,6 @@ For **production**, ensure:
 - **Route**: `/app`
 - **Features**:
   - Subscription status overview
-  - Lifetime access tracking
   - Quick access to customer portal
   - Profile management
 
@@ -102,14 +95,13 @@ if (!session?.user) {
 // Always check customer state before operations
 const { data } = await authClient.customer.state();
 const hasActiveSubscription = data.subscriptions?.some(sub => sub.status === "active");
-const hasLifetimeAccess = data.orders?.some(order => order.price?.type === "one_time");
 ```
 
 ### 3. Checkout Process
 ```typescript
 // Use Better Auth Polar checkout with product slugs
 await authClient.checkout({
-  slug: "monthly" | "yearly" | "lifetime",
+  slug: "monthly" | "yearly",
 });
 ```
 
@@ -125,7 +117,6 @@ The application implements access control based on customer state:
 
 - **Free Users**: Access to basic chat features
 - **Subscription Users**: Access to premium features + dashboard
-- **Lifetime Users**: Full access to all features permanently
 
 ## Important Notes
 

@@ -342,7 +342,7 @@ pnpm docker:app          # Application only
 
 ### Payment Integration
 - **Polar.sh integration** - Seamless payment processing
-- **Multiple subscription types** - Monthly, yearly, lifetime
+- **Multiple subscription types** - Monthly ($3), yearly ($30)
 - **Customer management** - Automatic customer creation
 - **Error handling** - Graceful degradation for payment failures
 
