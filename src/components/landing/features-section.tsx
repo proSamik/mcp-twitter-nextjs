@@ -193,14 +193,14 @@ export function FeaturesSection() {
             size="lg"
             className="px-10 py-6 text-xl font-bold hover:scale-105 transition-transform"
           >
-            Claim Your Lifetime Access
+            Start Your Free Trial
           </Button>
           <p className="text-muted-foreground mt-4 text-sm flex items-center justify-center gap-4">
             <span className="flex items-center gap-2">
               <IconBolt className="h-4 w-4" /> Setup in 5 minutes
             </span>
             <span className="flex items-center gap-2">
-              <IconCash className="h-4 w-4" /> No monthly fees
+              <IconCash className="h-4 w-4" /> Starting at $3/month
             </span>
             <span className="flex items-center gap-2">
               <IconLock className="h-4 w-4" /> Own your data
