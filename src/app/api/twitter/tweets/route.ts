@@ -554,6 +554,7 @@ export async function PATCH(request: NextRequest) {
               : undefined,
           threadData: threadData || undefined,
           userId,
+          communityId: tweet.communityId || undefined,
         });
         if (postResult.success && postResult.twitterTweetId) {
           postSuccess = true;
