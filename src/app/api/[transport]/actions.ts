@@ -632,6 +632,7 @@ export async function postTweet(args: any, userId: string) {
             ? tweet.threadTweets
             : undefined,
         userId,
+        communityId: tweet.communityId || undefined,
       });
 
       if (postResult.success && postResult.twitterTweetId) {
