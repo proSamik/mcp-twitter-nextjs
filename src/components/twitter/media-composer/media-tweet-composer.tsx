@@ -1153,7 +1153,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                       <div>
                         {mediaFiles.length === 1 ? (
                           /* Single Image - Natural Aspect Ratio */
-                          <div className="relative border rounded-lg overflow-hidden max-w-md">
+                          <div className="relative border rounded-lg overflow-hidden w-fit max-w-md">
                             <div
                               className="bg-muted relative max-h-80"
                               style={{
@@ -1237,8 +1237,8 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                         ) : (
                           /* Multiple Images - 1:1 Carousel */
                           <div className="relative">
-                            <div className="relative border rounded-lg overflow-hidden max-w-md">
-                              <div className="aspect-square bg-muted relative max-h-80">
+                            <div className="relative border rounded-lg overflow-hidden w-80">
+                              <div className="aspect-square bg-muted relative">
                                 {mediaFiles[currentImageIndex].type ===
                                 "video" ? (
                                   <div className="w-full h-full flex items-center justify-center">
@@ -1276,7 +1276,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                                             : prev - 1,
                                         )
                                       }
-                                      className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                                      className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-white/90 hover:bg-white text-black rounded-full shadow-md"
                                       disabled={mediaFiles.length <= 1}
                                     >
                                       <ChevronLeft className="h-4 w-4" />
@@ -1292,7 +1292,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                                             : prev + 1,
                                         )
                                       }
-                                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-white/90 hover:bg-white text-black rounded-full shadow-md"
                                       disabled={mediaFiles.length <= 1}
                                     >
                                       <ChevronRight className="h-4 w-4" />
