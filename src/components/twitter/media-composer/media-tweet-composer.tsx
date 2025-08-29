@@ -1102,14 +1102,28 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
 
                     {/* Media Files Display */}
                     {mediaFiles.length > 0 && (
-                      <div className="grid gap-4 grid-cols-2">
+                      <div
+                        className={`grid gap-2 ${
+                          mediaFiles.length === 1
+                            ? "grid-cols-1 max-w-md"
+                            : mediaFiles.length === 2
+                              ? "grid-cols-2"
+                              : "grid-cols-2 md:grid-cols-3"
+                        }`}
+                      >
                         {mediaFiles.map((mediaFile, index) => (
                           <div
                             key={index}
                             className="relative border rounded-lg overflow-hidden"
                           >
                             {/* Media Preview */}
-                            <div className="aspect-square bg-muted relative max-h-48">
+                            <div
+                              className={`bg-muted relative ${
+                                mediaFiles.length === 1
+                                  ? "aspect-[16/10] max-h-80"
+                                  : "aspect-video max-h-32"
+                              }`}
+                            >
                               {mediaFile.type === "video" ? (
                                 <div className="w-full h-full flex items-center justify-center">
                                   <Video className="h-8 w-8 text-muted-foreground" />
