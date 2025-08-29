@@ -173,6 +173,10 @@ export async function POST(request: NextRequest) {
         if (twitterMediaIds.length > 0) {
           tweetOptions.mediaIds = twitterMediaIds;
         }
+        // Add community ID if present
+        if (tweet.communityId && tweet.communityId !== "none") {
+          tweetOptions.communityId = tweet.communityId;
+        }
         const result = await postWithRetry(() =>
           twitterClient.postTweet(content, tweetOptions),
         );
