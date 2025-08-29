@@ -161,6 +161,11 @@ export async function POST(request: NextRequest) {
           mediaIds: mediaIdsPerTweet,
         };
 
+        // Add community ID if present
+        if (tweet.communityId && tweet.communityId !== "none") {
+          threadOptions.communityId = tweet.communityId;
+        }
+
         const results = await postWithRetry(() =>
           twitterClient.postThread(tweetsToPost, threadOptions),
         );
