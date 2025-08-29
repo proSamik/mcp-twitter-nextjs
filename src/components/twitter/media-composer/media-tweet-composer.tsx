@@ -38,6 +38,8 @@ import {
   Play,
   AlertCircle,
   Save,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTwitterWebSocket } from "@/lib/websocket/client";
@@ -62,6 +64,9 @@ interface MediaFile {
   r2Key?: string;
   r2Url?: string;
   error?: string;
+  aspectRatio?: number; // width / height
+  naturalWidth?: number;
+  naturalHeight?: number;
 }
 
 interface ThreadTweetData {
@@ -208,6 +213,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   const [posting, setPosting] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Upload queue reference
   const uploadQueueRef = useRef<UploadQueue | null>(null);
@@ -216,6 +222,32 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
   useEffect(() => {
     uploadQueueRef.current = new UploadQueue(handleUploadComplete);
   }, []);
+
+  // Function to get image dimensions and aspect ratio
+  const getImageAspectRatio = (
+    file: File,
+  ): Promise<{ aspectRatio: number; width: number; height: number }> => {
+    return new Promise((resolve) => {
+      if (file.type.startsWith("video/")) {
+        resolve({ aspectRatio: 16 / 9, width: 1920, height: 1080 }); // Default for videos
+        return;
+      }
+
+      const img = document.createElement("img");
+      img.onload = () => {
+        const aspectRatio = img.naturalWidth / img.naturalHeight;
+        resolve({
+          aspectRatio,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+      };
+      img.onerror = () => {
+        resolve({ aspectRatio: 16 / 10, width: 1600, height: 1000 }); // Fallback
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  };
 
   // Set up WebSocket for real-time feedback
   useTwitterWebSocket(userId || null, {
@@ -402,10 +434,14 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         return;
       }
 
-      const newMediaFiles: MediaFile[] = acceptedFiles.map((file) => {
-        const isVideo = file.type.startsWith("video/");
+      const newMediaFiles: MediaFile[] = [];
 
-        return {
+      // Process files and get aspect ratios
+      for (const file of acceptedFiles) {
+        const isVideo = file.type.startsWith("video/");
+        const { aspectRatio, width, height } = await getImageAspectRatio(file);
+
+        newMediaFiles.push({
           file,
           url: URL.createObjectURL(file),
           type: isVideo ? "video" : "image",
@@ -413,8 +449,11 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
           uploading: false,
           uploaded: false,
           uploadProgress: 0,
-        };
-      });
+          aspectRatio,
+          naturalWidth: width,
+          naturalHeight: height,
+        });
+      }
 
       setMediaFiles((prev) => [...prev, ...newMediaFiles]);
 
@@ -468,7 +507,16 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
     URL.revokeObjectURL(fileToRemove.url);
 
     // Remove from state
-    setMediaFiles((prev) => prev.filter((_, i) => i !== index));
+    setMediaFiles((prev) => {
+      const newFiles = prev.filter((_, i) => i !== index);
+      // Reset current index if needed
+      if (index <= currentImageIndex && currentImageIndex > 0) {
+        setCurrentImageIndex((prevIndex) => Math.max(0, prevIndex - 1));
+      } else if (currentImageIndex >= newFiles.length) {
+        setCurrentImageIndex(0);
+      }
+      return newFiles;
+    });
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -1102,33 +1150,22 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
 
                     {/* Media Files Display */}
                     {mediaFiles.length > 0 && (
-                      <div
-                        className={`grid gap-2 ${
-                          mediaFiles.length === 1
-                            ? "grid-cols-1 max-w-md"
-                            : mediaFiles.length === 2
-                              ? "grid-cols-2"
-                              : "grid-cols-2 md:grid-cols-3"
-                        }`}
-                      >
-                        {mediaFiles.map((mediaFile, index) => (
-                          <div
-                            key={index}
-                            className="relative border rounded-lg overflow-hidden"
-                          >
-                            {/* Media Preview */}
+                      <div>
+                        {mediaFiles.length === 1 ? (
+                          /* Single Image - Natural Aspect Ratio */
+                          <div className="relative border rounded-lg overflow-hidden max-w-md">
                             <div
-                              className={`bg-muted relative ${
-                                mediaFiles.length === 1
-                                  ? "aspect-[16/10] max-h-80"
-                                  : "aspect-video max-h-32"
-                              }`}
+                              className="bg-muted relative max-h-80"
+                              style={{
+                                aspectRatio:
+                                  mediaFiles[0].aspectRatio || 16 / 10,
+                              }}
                             >
-                              {mediaFile.type === "video" ? (
+                              {mediaFiles[0].type === "video" ? (
                                 <div className="w-full h-full flex items-center justify-center">
                                   <Video className="h-8 w-8 text-muted-foreground" />
                                   <video
-                                    src={mediaFile.url}
+                                    src={mediaFiles[0].url}
                                     className="absolute inset-0 w-full h-full object-cover"
                                     muted
                                   />
@@ -1139,44 +1176,46 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                               ) : (
                                 <div className="relative w-full h-full">
                                   <Image
-                                    src={mediaFile.url}
+                                    src={mediaFiles[0].url}
                                     alt="Upload preview"
                                     fill
                                     className="object-cover"
                                   />
                                 </div>
                               )}
+
+                              {/* Remove button for single image */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeMediaFile(0)}
+                                className="absolute top-2 right-2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
                             </div>
 
-                            {/* Upload Status */}
+                            {/* Single Image Status */}
                             <div className="p-2 space-y-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-xs text-muted-foreground truncate">
-                                  {mediaFile.file.name}
+                                  {mediaFiles[0].file.name}
                                 </span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeMediaFile(index)}
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
                               </div>
 
-                              {mediaFile.uploading && (
+                              {mediaFiles[0].uploading && (
                                 <div className="space-y-1">
                                   <Progress
-                                    value={mediaFile.uploadProgress}
+                                    value={mediaFiles[0].uploadProgress}
                                     className="h-1"
                                   />
                                   <p className="text-xs text-muted-foreground">
-                                    Uploading... {mediaFile.uploadProgress}%
+                                    Uploading... {mediaFiles[0].uploadProgress}%
                                   </p>
                                 </div>
                               )}
 
-                              {mediaFile.uploaded && (
+                              {mediaFiles[0].uploaded && (
                                 <div className="flex items-center gap-1">
                                   <div className="h-2 w-2 bg-green-500 rounded-full" />
                                   <span className="text-xs text-green-600">
@@ -1185,17 +1224,184 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
                                 </div>
                               )}
 
-                              {mediaFile.error && (
+                              {mediaFiles[0].error && (
                                 <div className="flex items-center gap-1">
                                   <AlertCircle className="h-3 w-3 text-destructive" />
                                   <span className="text-xs text-destructive">
-                                    {mediaFile.error}
+                                    {mediaFiles[0].error}
                                   </span>
                                 </div>
                               )}
                             </div>
                           </div>
-                        ))}
+                        ) : (
+                          /* Multiple Images - 1:1 Carousel */
+                          <div className="relative">
+                            <div className="relative border rounded-lg overflow-hidden max-w-md">
+                              <div className="aspect-square bg-muted relative max-h-80">
+                                {mediaFiles[currentImageIndex].type ===
+                                "video" ? (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Video className="h-8 w-8 text-muted-foreground" />
+                                    <video
+                                      src={mediaFiles[currentImageIndex].url}
+                                      className="absolute inset-0 w-full h-full object-cover"
+                                      muted
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <Play className="h-12 w-12 text-white drop-shadow-lg" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="relative w-full h-full">
+                                    <Image
+                                      src={mediaFiles[currentImageIndex].url}
+                                      alt="Upload preview"
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Navigation Arrows */}
+                                {mediaFiles.length > 1 && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        setCurrentImageIndex((prev) =>
+                                          prev === 0
+                                            ? mediaFiles.length - 1
+                                            : prev - 1,
+                                        )
+                                      }
+                                      className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                                      disabled={mediaFiles.length <= 1}
+                                    >
+                                      <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        setCurrentImageIndex((prev) =>
+                                          prev === mediaFiles.length - 1
+                                            ? 0
+                                            : prev + 1,
+                                        )
+                                      }
+                                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                                      disabled={mediaFiles.length <= 1}
+                                    >
+                                      <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+
+                                {/* Remove current image button */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    removeMediaFile(currentImageIndex);
+                                    setCurrentImageIndex((prev) =>
+                                      prev >= mediaFiles.length - 1 ? 0 : prev,
+                                    );
+                                  }}
+                                  className="absolute top-2 right-2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+
+                                {/* Image counter */}
+                                <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                                  {currentImageIndex + 1} / {mediaFiles.length}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Current Image Status */}
+                            <div className="p-2 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {mediaFiles[currentImageIndex].file.name}
+                                </span>
+                              </div>
+
+                              {mediaFiles[currentImageIndex].uploading && (
+                                <div className="space-y-1">
+                                  <Progress
+                                    value={
+                                      mediaFiles[currentImageIndex]
+                                        .uploadProgress
+                                    }
+                                    className="h-1"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Uploading...{" "}
+                                    {
+                                      mediaFiles[currentImageIndex]
+                                        .uploadProgress
+                                    }
+                                    %
+                                  </p>
+                                </div>
+                              )}
+
+                              {mediaFiles[currentImageIndex].uploaded && (
+                                <div className="flex items-center gap-1">
+                                  <div className="h-2 w-2 bg-green-500 rounded-full" />
+                                  <span className="text-xs text-green-600">
+                                    Uploaded
+                                  </span>
+                                </div>
+                              )}
+
+                              {mediaFiles[currentImageIndex].error && (
+                                <div className="flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3 text-destructive" />
+                                  <span className="text-xs text-destructive">
+                                    {mediaFiles[currentImageIndex].error}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Thumbnail Navigation */}
+                            {mediaFiles.length > 1 && (
+                              <div className="flex gap-1 p-2 overflow-x-auto">
+                                {mediaFiles.map((mediaFile, index) => (
+                                  <button
+                                    key={index}
+                                    onClick={() => setCurrentImageIndex(index)}
+                                    className={`flex-shrink-0 w-12 h-12 rounded border-2 overflow-hidden ${
+                                      index === currentImageIndex
+                                        ? "border-primary"
+                                        : "border-muted-foreground/25"
+                                    }`}
+                                  >
+                                    {mediaFile.type === "video" ? (
+                                      <div className="w-full h-full bg-muted flex items-center justify-center">
+                                        <Video className="h-4 w-4 text-muted-foreground" />
+                                      </div>
+                                    ) : (
+                                      <div className="relative w-full h-full">
+                                        <Image
+                                          src={mediaFile.url}
+                                          alt="Thumbnail"
+                                          fill
+                                          className="object-cover"
+                                        />
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
