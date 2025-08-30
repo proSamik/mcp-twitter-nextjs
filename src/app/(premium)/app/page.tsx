@@ -1,7 +1,7 @@
 "use client";
 
 import { authClient } from "auth/client";
-import { useEffect, Suspense } from "react";
+import { useEffect, Suspense, useRef } from "react";
 import { Card, CardContent, CardHeader } from "ui/card";
 import { Button } from "ui/button";
 import { Calendar, Users } from "lucide-react";
@@ -48,6 +48,11 @@ function DashboardContent() {
   const { data: session } = authClient.useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const tweetListRef = useRef<{ refreshTweets: () => void } | null>(null);
+
+  const handleTweetListRefresh = () => {
+    tweetListRef.current?.refreshTweets();
+  };
 
   // Handle URL parameters (checkout success, Twitter connection results)
   useEffect(() => {
@@ -186,7 +191,10 @@ function DashboardContent() {
 
           {/* Right Column - Tweet Composer */}
           <div className="flex-1 pl-4">
-            <MediaTweetComposer userId={session?.user?.id} />
+            <MediaTweetComposer
+              userId={session?.user?.id}
+              onTweetAction={handleTweetListRefresh}
+            />
           </div>
         </div>
 
@@ -250,12 +258,15 @@ function DashboardContent() {
 
           {/* Mobile Tweet Composer */}
           <div className="mt-6">
-            <MediaTweetComposer userId={session?.user?.id} />
+            <MediaTweetComposer
+              userId={session?.user?.id}
+              onTweetAction={handleTweetListRefresh}
+            />
           </div>
         </div>
 
         {/* Tweet Management - Dynamic list with real data */}
-        <TweetList userId={session?.user?.id || ""} />
+        <TweetList ref={tweetListRef} userId={session?.user?.id || ""} />
       </div>
     </div>
   );
