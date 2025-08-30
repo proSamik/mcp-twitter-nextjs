@@ -28,7 +28,6 @@ import {
 import { toast } from "sonner";
 import { TweetEntity } from "@/lib/db/pg/schema.pg";
 import { format } from "date-fns";
-import { SecureMediaGrid } from "@/components/ui/secure-media";
 import { Community } from "./shared/composer-utils";
 
 interface MediaFile {
