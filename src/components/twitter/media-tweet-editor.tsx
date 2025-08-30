@@ -66,6 +66,7 @@ export function MediaTweetEditor({
   const [isPosting, setIsPosting] = useState(false);
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedCommunity, setSelectedCommunity] = useState<string>("");
+  const [communitiesLoading, setCommunitiesLoading] = useState<boolean>(false);
 
   // Initialize form data when component mounts or tweet changes
   useEffect(() => {
@@ -116,7 +117,11 @@ export function MediaTweetEditor({
       }
 
       // Initialize community selection
-      setSelectedCommunity(tweet.communityId || "none");
+      const communityValue =
+        tweet.communityId && tweet.communityId !== "null"
+          ? tweet.communityId
+          : "none";
+      setSelectedCommunity(communityValue);
     }
   }, [tweet]);
 
@@ -129,6 +134,7 @@ export function MediaTweetEditor({
 
   const fetchCommunities = async (twitterAccountId: string) => {
     try {
+      setCommunitiesLoading(true);
       const response = await fetch(
         `/api/twitter/communities?twitterAccountId=${twitterAccountId}`,
       );
@@ -141,6 +147,8 @@ export function MediaTweetEditor({
       }
     } catch (error) {
       console.error("Error fetching communities:", error);
+    } finally {
+      setCommunitiesLoading(false);
     }
   };
 
@@ -1182,7 +1190,11 @@ export function MediaTweetEditor({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">No Community</SelectItem>
-            {communities.length > 0 ? (
+            {communitiesLoading ? (
+              <SelectItem value="loading" disabled>
+                Loading communities...
+              </SelectItem>
+            ) : communities.length > 0 ? (
               communities.map((community) => (
                 <SelectItem key={community.id} value={community.communityId}>
                   <div className="flex items-center gap-2">
@@ -1192,8 +1204,8 @@ export function MediaTweetEditor({
                 </SelectItem>
               ))
             ) : (
-              <SelectItem value="loading" disabled>
-                Loading communities...
+              <SelectItem value="no-communities" disabled>
+                No communities available
               </SelectItem>
             )}
           </SelectContent>
