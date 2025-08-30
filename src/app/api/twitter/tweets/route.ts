@@ -226,6 +226,7 @@ export async function PATCH(request: NextRequest) {
       isThread,
       mediaIds,
       timezone,
+      communityId,
     } = body;
     if (!tweetId || !action) {
       return NextResponse.json(
@@ -382,6 +383,8 @@ export async function PATCH(request: NextRequest) {
             isThread && threadData && threadData.length > 0
               ? threadData.flatMap((t: any) => t.mediaIds || [])
               : mediaIds || tweet.mediaUrls || [],
+          communityId:
+            communityId !== undefined ? communityId || null : tweet.communityId,
           updatedAt: new Date(),
         })
         .where(eq(TweetSchema.id, tweet.id))
@@ -514,6 +517,8 @@ export async function PATCH(request: NextRequest) {
             isThread && threadData && threadData.length > 0
               ? threadData.flatMap((t: any) => t.mediaIds || [])
               : mediaIds || tweet.mediaUrls || [],
+          communityId:
+            communityId !== undefined ? communityId || null : tweet.communityId,
           updatedAt: new Date(),
         })
         .where(eq(TweetSchema.id, tweet.id))
