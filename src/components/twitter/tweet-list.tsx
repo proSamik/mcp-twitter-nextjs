@@ -145,7 +145,7 @@ export function TweetList({ userId }: TweetListProps) {
   const getCommunityName = (communityId: string | null) => {
     if (!communityId) return null;
     const community = communities.find((c) => c.communityId === communityId);
-    return community?.name || communityId;
+    return community?.name || null;
   };
 
   const fetchTweets = async (page = currentPage) => {
@@ -330,12 +330,26 @@ export function TweetList({ userId }: TweetListProps) {
             {tweet.tweetType === "thread" && (
               <Badge variant="outline">Thread</Badge>
             )}
-            {tweet.communityId && getCommunityName(tweet.communityId) && (
-              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                <Users className="h-3 w-3 mr-1" />
-                {getCommunityName(tweet.communityId)}
-              </Badge>
-            )}
+            {(() => {
+              const communityName = getCommunityName(tweet.communityId);
+              return communityName ? (
+                <Badge
+                  variant="secondary"
+                  className="bg-blue-100 text-blue-800"
+                >
+                  <Users className="h-3 w-3 mr-1" />
+                  {communityName}
+                </Badge>
+              ) : tweet.communityId ? (
+                <Badge
+                  variant="secondary"
+                  className="bg-gray-100 text-gray-600"
+                >
+                  <Users className="h-3 w-3 mr-1" />
+                  Community
+                </Badge>
+              ) : null;
+            })()}
           </div>
           <div className="flex items-center gap-1">
             {tweet.status === "posted" && tweet.twitterTweetId && (
