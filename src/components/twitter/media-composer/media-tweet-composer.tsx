@@ -1607,74 +1607,276 @@ export function MediaTweetComposer({
                           </Button>
                         )}
 
-                        {/* Images Display - Compact grid below content */}
+                        {/* Thread Media Display - Twitter-like with proper aspect ratios */}
                         {tweet.mediaFiles.length > 0 && (
-                          <div className="grid gap-2 grid-cols-2 mt-2">
-                            {tweet.mediaFiles.map((mediaFile, mediaIndex) => (
-                              <div
-                                key={mediaIndex}
-                                className="relative border rounded-lg overflow-hidden group"
-                              >
-                                {/* Media Preview */}
-                                <div className="aspect-video bg-muted relative max-h-32">
-                                  {mediaFile.type === "video" ? (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      <video
-                                        src={mediaFile.url}
-                                        className="absolute inset-0 w-full h-full object-cover"
-                                        muted
-                                      />
-                                      <div className="absolute inset-0 flex items-center justify-center">
-                                        <Play className="h-6 w-6 text-white drop-shadow-lg" />
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="relative w-full h-full">
-                                      <Image
-                                        src={mediaFile.url}
-                                        alt="Upload preview"
-                                        fill
-                                        className="object-cover"
-                                      />
-                                    </div>
-                                  )}
-
-                                  {/* Remove button overlay */}
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                      removeTweetMediaFile(
-                                        tweetIndex,
-                                        mediaIndex,
-                                      )
-                                    }
-                                    className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          <div className="border rounded-lg overflow-hidden">
+                            {tweet.mediaFiles.length === 1 ? (
+                              /* Single Image - Natural Aspect Ratio */
+                              <div className="relative">
+                                {tweet.mediaFiles[0].type === "video" ? (
+                                  <div
+                                    className="bg-muted relative"
+                                    style={{
+                                      aspectRatio:
+                                        tweet.mediaFiles[0].aspectRatio ||
+                                        16 / 9,
+                                      maxHeight: "400px",
+                                    }}
                                   >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
-
-                                {/* Upload Status Bar */}
-                                {mediaFile.uploading && (
-                                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-1">
-                                    <Progress
-                                      value={mediaFile.uploadProgress}
-                                      className="h-1"
+                                    <video
+                                      src={tweet.mediaFiles[0].url}
+                                      className="absolute inset-0 w-full h-full object-cover"
+                                      muted
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <Play className="h-12 w-12 text-white drop-shadow-lg" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="bg-muted relative"
+                                    style={{
+                                      aspectRatio:
+                                        tweet.mediaFiles[0].aspectRatio ||
+                                        16 / 9,
+                                      maxHeight: "400px",
+                                    }}
+                                  >
+                                    <Image
+                                      src={tweet.mediaFiles[0].url}
+                                      alt="Upload preview"
+                                      fill
+                                      className="object-contain"
                                     />
                                   </div>
                                 )}
 
-                                {mediaFile.error && (
-                                  <div className="absolute bottom-0 left-0 right-0 bg-red-500/90 p-1 flex items-center gap-1 justify-center">
-                                    <AlertCircle className="h-3 w-3 text-white" />
+                                {/* Remove button for single image */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    removeTweetMediaFile(tweetIndex, 0)
+                                  }
+                                  className="absolute top-2 right-2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+
+                                {/* Upload Status for single image */}
+                                {tweet.mediaFiles[0].uploading && (
+                                  <div className="absolute bottom-2 left-2 right-2 bg-black/50 p-2 rounded">
+                                    <div className="flex items-center justify-between text-white text-xs mb-1">
+                                      <span className="truncate">
+                                        {tweet.mediaFiles[0].file.name}
+                                      </span>
+                                    </div>
+                                    <Progress
+                                      value={tweet.mediaFiles[0].uploadProgress}
+                                      className="h-1"
+                                    />
+                                    <p className="text-xs text-white mt-1">
+                                      Uploading...{" "}
+                                      {tweet.mediaFiles[0].uploadProgress}%
+                                    </p>
+                                  </div>
+                                )}
+
+                                {tweet.mediaFiles[0].error && (
+                                  <div className="absolute bottom-2 left-2 right-2 bg-red-500/90 p-2 rounded flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4 text-white" />
                                     <span className="text-xs text-white">
-                                      Failed
+                                      {tweet.mediaFiles[0].error}
                                     </span>
                                   </div>
                                 )}
                               </div>
-                            ))}
+                            ) : (
+                              /* Multiple Images - 1:1 Carousel */
+                              <div className="relative">
+                                <div className="relative border rounded-lg overflow-hidden w-full max-w-80 mx-auto">
+                                  <div className="aspect-square bg-muted relative">
+                                    {tweet.mediaFiles[
+                                      (tweetIndex * 10) %
+                                        tweet.mediaFiles.length
+                                    ]?.type === "video" ? (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <Video className="h-8 w-8 text-muted-foreground" />
+                                        <video
+                                          src={
+                                            tweet.mediaFiles[
+                                              (tweetIndex * 10) %
+                                                tweet.mediaFiles.length
+                                            ]?.url
+                                          }
+                                          className="absolute inset-0 w-full h-full object-cover"
+                                          muted
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                          <Play className="h-12 w-12 text-white drop-shadow-lg" />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="relative w-full h-full">
+                                        <Image
+                                          src={tweet.mediaFiles[0].url}
+                                          alt="Upload preview"
+                                          fill
+                                          className="object-cover"
+                                        />
+                                      </div>
+                                    )}
+
+                                    {/* Navigation Arrows */}
+                                    {tweet.mediaFiles.length > 1 && (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            // Move the first image to the end
+                                            const updatedTweets = [
+                                              ...threadTweets,
+                                            ];
+                                            const currentFiles = [
+                                              ...tweet.mediaFiles,
+                                            ];
+                                            const firstFile =
+                                              currentFiles.shift();
+                                            if (firstFile)
+                                              currentFiles.push(firstFile);
+                                            updatedTweets[tweetIndex] = {
+                                              ...tweet,
+                                              mediaFiles: currentFiles,
+                                            };
+                                            setThreadTweets(updatedTweets);
+                                          }}
+                                          className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-white/90 hover:bg-white text-black rounded-full shadow-md"
+                                        >
+                                          <ChevronLeft className="h-4 w-4" />
+                                        </Button>
+
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            // Move the last image to the front
+                                            const updatedTweets = [
+                                              ...threadTweets,
+                                            ];
+                                            const currentFiles = [
+                                              ...tweet.mediaFiles,
+                                            ];
+                                            const lastFile = currentFiles.pop();
+                                            if (lastFile)
+                                              currentFiles.unshift(lastFile);
+                                            updatedTweets[tweetIndex] = {
+                                              ...tweet,
+                                              mediaFiles: currentFiles,
+                                            };
+                                            setThreadTweets(updatedTweets);
+                                          }}
+                                          className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-white/90 hover:bg-white text-black rounded-full shadow-md"
+                                        >
+                                          <ChevronRight className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    )}
+
+                                    {/* Remove button for carousel */}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        removeTweetMediaFile(tweetIndex, 0)
+                                      }
+                                      className="absolute top-2 right-2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white z-10"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+
+                                    {/* Media counter */}
+                                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                      1 / {tweet.mediaFiles.length}
+                                    </div>
+                                  </div>
+
+                                  {/* Thumbnail strip */}
+                                  {tweet.mediaFiles.length > 1 && (
+                                    <div className="flex gap-1 p-2 bg-background/95 overflow-x-auto">
+                                      {tweet.mediaFiles.map(
+                                        (file, mediaIndex) => (
+                                          <button
+                                            key={mediaIndex}
+                                            onClick={() => {
+                                              // Reorder array to bring clicked image to front
+                                              const updatedTweets = [
+                                                ...threadTweets,
+                                              ];
+                                              const currentFiles = [
+                                                ...tweet.mediaFiles,
+                                              ];
+                                              const selectedFile =
+                                                currentFiles.splice(
+                                                  mediaIndex,
+                                                  1,
+                                                )[0];
+                                              currentFiles.unshift(
+                                                selectedFile,
+                                              );
+                                              updatedTweets[tweetIndex] = {
+                                                ...tweet,
+                                                mediaFiles: currentFiles,
+                                              };
+                                              setThreadTweets(updatedTweets);
+                                            }}
+                                            className={`relative flex-shrink-0 w-12 h-12 border-2 rounded overflow-hidden ${
+                                              mediaIndex === 0
+                                                ? "border-primary"
+                                                : "border-transparent"
+                                            }`}
+                                          >
+                                            {file.type === "video" ? (
+                                              <div className="w-full h-full bg-muted flex items-center justify-center">
+                                                <Play className="h-3 w-3 text-white" />
+                                              </div>
+                                            ) : (
+                                              <div className="relative w-full h-full">
+                                                <Image
+                                                  src={file.url}
+                                                  alt="Thumbnail"
+                                                  fill
+                                                  className="object-cover"
+                                                />
+                                              </div>
+                                            )}
+                                          </button>
+                                        ),
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Upload status for carousel */}
+                                {tweet.mediaFiles.some((f) => f.uploading) && (
+                                  <div className="mt-2 p-2 bg-muted/50 rounded text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                      <span>Uploading media files...</span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {tweet.mediaFiles.some((f) => f.error) && (
+                                  <div className="mt-2 p-2 bg-red-500/10 border border-red-200 rounded text-xs flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4 text-red-500" />
+                                    <span className="text-red-700">
+                                      Some media uploads failed
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
