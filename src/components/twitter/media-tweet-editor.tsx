@@ -1174,30 +1174,31 @@ export function MediaTweetEditor({
       )}
 
       {/* Community Selection */}
-      {communities.length > 0 && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Community (optional):</label>
-          <Select
-            value={selectedCommunity}
-            onValueChange={setSelectedCommunity}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select community (optional)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No Community</SelectItem>
-              {communities.map((community) => (
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Community (optional):</label>
+        <Select value={selectedCommunity} onValueChange={setSelectedCommunity}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select community (optional)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No Community</SelectItem>
+            {communities.length > 0 ? (
+              communities.map((community) => (
                 <SelectItem key={community.id} value={community.communityId}>
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
                     <span>{community.name}</span>
                   </div>
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+              ))
+            ) : (
+              <SelectItem value="loading" disabled>
+                Loading communities...
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="flex gap-2 justify-end">
         <Button
