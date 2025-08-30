@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { TweetEntity } from "@/lib/db/pg/schema.pg";
 import { format } from "date-fns";
 import { Community } from "./shared/composer-utils";
+import { SecureMedia } from "@/components/ui/secure-media";
 
 interface MediaFile {
   file: File;
@@ -49,6 +50,50 @@ interface MediaTweetEditorProps {
   onCancel: () => void;
 }
 
+// Custom SecureMediaGrid with remove functionality for editor
+function EditableSecureMediaGrid({
+  mediaKeys,
+  onRemove,
+  className = "",
+}: {
+  mediaKeys: string[];
+  onRemove?: (mediaKey: string) => void;
+  className?: string;
+}) {
+  if (mediaKeys.length === 0) return null;
+
+  const getGridCols = () => {
+    if (mediaKeys.length === 1) return "grid-cols-1";
+    if (mediaKeys.length === 2) return "grid-cols-2";
+    return "grid-cols-2";
+  };
+
+  return (
+    <div className={`grid gap-2 ${getGridCols()} max-w-sm ${className}`}>
+      {mediaKeys.map((mediaKey, index) => (
+        <div
+          key={index}
+          className="relative border rounded-lg overflow-hidden group"
+        >
+          <div className="aspect-square bg-muted relative w-full">
+            <SecureMedia mediaKey={mediaKey} alt={`Media ${index + 1}`} />
+            {onRemove && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRemove(mediaKey)}
+                className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function MediaTweetEditor({
   tweet,
   onUpdate,
@@ -67,34 +112,34 @@ export function MediaTweetEditor({
   const [selectedCommunity, setSelectedCommunity] = useState<string>("");
   const [communitiesLoading, setCommunitiesLoading] = useState<boolean>(false);
 
+  // Track existing media separately from new uploads
+  const [existingMediaKeys, setExistingMediaKeys] = useState<string[]>([]);
+  const [existingThreadMedia, setExistingThreadMedia] = useState<{
+    [tweetIndex: number]: string[];
+  }>({});
+
   // Initialize form data when component mounts or tweet changes
   useEffect(() => {
     if (tweet) {
-      // Helper function to create MediaFile from R2 key
-      const createMediaFileFromR2Key = (r2Key: string): MediaFile => ({
-        file: new File([], "existing-media"), // Placeholder file for existing media
-        url: `/api/media/${r2Key}`, // URL to fetch the media
-        type: "image", // Default to image, could be enhanced to detect type
-        size: 0, // Unknown size for existing files
-        uploading: false,
-        uploaded: true, // Already uploaded
-        uploadProgress: 100,
-        r2Key,
-        r2Url: `/api/media/${r2Key}`,
-      });
-
       if (tweet.tweetType === "thread") {
         // Check if we have structured threadTweets data
         if (tweet.threadTweets && tweet.threadTweets.length > 0) {
-          // Use structured thread data with existing media
+          // Use structured thread data
           setEditThreadTweets(
             tweet.threadTweets.map((threadTweet: any) => ({
               content: threadTweet.content,
-              mediaFiles: (threadTweet.mediaIds || []).map(
-                createMediaFileFromR2Key,
-              ),
+              mediaFiles: [], // Only for new uploads
             })),
           );
+
+          // Store existing thread media separately
+          const threadMediaMap: { [tweetIndex: number]: string[] } = {};
+          tweet.threadTweets.forEach((threadTweet: any, index: number) => {
+            if (threadTweet.mediaIds && threadTweet.mediaIds.length > 0) {
+              threadMediaMap[index] = threadTweet.mediaIds;
+            }
+          });
+          setExistingThreadMedia(threadMediaMap);
         } else {
           // Fallback: parse content by splitting on double newlines
           const threadContents = tweet.content
@@ -106,18 +151,19 @@ export function MediaTweetEditor({
               mediaFiles: [],
             })),
           );
+          setExistingThreadMedia({});
         }
         setEditContent(""); // Clear single content for threads
         setEditMediaFiles([]); // Clear single media for threads
+        setExistingMediaKeys([]); // Clear existing single media
       } else {
         setEditContent(tweet.content || "");
         setEditThreadTweets([]); // Clear thread tweets for single tweets
+        setEditMediaFiles([]); // Clear new uploads for single tweets
 
-        // Initialize single tweet media from existing mediaUrls
-        const existingMedia = (tweet.mediaUrls || []).map(
-          createMediaFileFromR2Key,
-        );
-        setEditMediaFiles(existingMedia);
+        // Store existing single tweet media
+        setExistingMediaKeys(tweet.mediaUrls || []);
+        setExistingThreadMedia({});
       }
 
       // Pre-populate schedule date if editing a scheduled tweet
@@ -195,7 +241,8 @@ export function MediaTweetEditor({
   ) => {
     const tweetData = editThreadTweets[tweetIndex];
     const MAX_FILES = 4;
-    const currentFileCount = tweetData.mediaFiles.length;
+    const existingCount = (existingThreadMedia[tweetIndex] || []).length;
+    const currentFileCount = existingCount + tweetData.mediaFiles.length;
 
     if (currentFileCount + files.length > MAX_FILES) {
       toast.error(
@@ -390,7 +437,26 @@ export function MediaTweetEditor({
       }
 
       setEditThreadTweets((prev) => prev.filter((_, i) => i !== index));
+      // Also remove existing media for this tweet
+      setExistingThreadMedia((prev) => {
+        const newMedia = { ...prev };
+        delete newMedia[index];
+        return newMedia;
+      });
     }
+  };
+
+  // Function to remove existing media from single tweet
+  const removeExistingMedia = (mediaKey: string) => {
+    setExistingMediaKeys((prev) => prev.filter((key) => key !== mediaKey));
+  };
+
+  // Function to remove existing media from thread tweet
+  const removeExistingThreadMedia = (tweetIndex: number, mediaKey: string) => {
+    setExistingThreadMedia((prev) => ({
+      ...prev,
+      [tweetIndex]: (prev[tweetIndex] || []).filter((key) => key !== mediaKey),
+    }));
   };
 
   // Get the content to send to API
@@ -409,13 +475,19 @@ export function MediaTweetEditor({
     if (tweet?.tweetType === "thread") {
       return editThreadTweets
         .filter((t) => t.content.trim())
-        .map((tweetData) => ({
-          content: tweetData.content,
-          mediaIds: tweetData.mediaFiles
+        .map((tweetData, index) => {
+          // Combine existing media with new uploads
+          const existingMedia = existingThreadMedia[index] || [];
+          const newUploadedMedia = tweetData.mediaFiles
             .filter((file) => file.uploaded && file.r2Key)
             .map((file) => file.r2Key)
-            .filter((key): key is string => Boolean(key)),
-        }));
+            .filter((key): key is string => Boolean(key));
+
+          return {
+            content: tweetData.content,
+            mediaIds: [...existingMedia, ...newUploadedMedia],
+          };
+        });
     }
     return undefined;
   };
@@ -576,7 +648,7 @@ export function MediaTweetEditor({
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
       const MAX_FILES = 4; // Twitter limit
-      const currentFileCount = editMediaFiles.length;
+      const currentFileCount = existingMediaKeys.length + editMediaFiles.length;
 
       if (currentFileCount + acceptedFiles.length > MAX_FILES) {
         toast.error(
@@ -607,7 +679,7 @@ export function MediaTweetEditor({
         await uploadEditMediaFile(mediaFile, currentFileCount + i);
       }
     },
-    [editMediaFiles.length],
+    [existingMediaKeys.length, editMediaFiles.length],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -617,7 +689,7 @@ export function MediaTweetEditor({
       "video/*": [".mp4", ".mov", ".avi", ".webm"],
     },
     maxSize: 512 * 1024 * 1024, // 512MB
-    disabled: editMediaFiles.length >= 4,
+    disabled: existingMediaKeys.length + editMediaFiles.length >= 4,
   });
 
   // Handler to schedule a draft
@@ -660,14 +732,15 @@ export function MediaTweetEditor({
           requestBody.hasMedia = threadData.some((t) => t.mediaIds.length > 0);
         }
       } else {
-        // For single tweets, include mediaIds
-        const mediaIds = editMediaFiles
+        // For single tweets, include mediaIds (existing + new uploads)
+        const newUploadedMedia = editMediaFiles
           .filter((file) => file.uploaded)
           .map((file) => file.r2Key)
           .filter(Boolean);
+        const allMediaIds = [...existingMediaKeys, ...newUploadedMedia];
 
-        if (mediaIds.length > 0) {
-          requestBody.mediaIds = mediaIds;
+        if (allMediaIds.length > 0) {
+          requestBody.mediaIds = allMediaIds;
           requestBody.hasMedia = true;
         }
       }
@@ -732,14 +805,15 @@ export function MediaTweetEditor({
           requestBody.hasMedia = threadData.some((t) => t.mediaIds.length > 0);
         }
       } else {
-        // For single tweets, include mediaIds
-        const mediaIds = editMediaFiles
+        // For single tweets, include mediaIds (existing + new uploads)
+        const newUploadedMedia = editMediaFiles
           .filter((file) => file.uploaded)
           .map((file) => file.r2Key)
           .filter(Boolean);
+        const allMediaIds = [...existingMediaKeys, ...newUploadedMedia];
 
-        if (mediaIds.length > 0) {
-          requestBody.mediaIds = mediaIds;
+        if (allMediaIds.length > 0) {
+          requestBody.mediaIds = allMediaIds;
           requestBody.hasMedia = true;
         }
       }
@@ -802,14 +876,15 @@ export function MediaTweetEditor({
           requestBody.hasMedia = threadData.some((t) => t.mediaIds.length > 0);
         }
       } else {
-        // For single tweets, include mediaIds
-        const mediaIds = editMediaFiles
+        // For single tweets, include mediaIds (existing + new uploads)
+        const newUploadedMedia = editMediaFiles
           .filter((file) => file.uploaded)
           .map((file) => file.r2Key)
           .filter(Boolean);
+        const allMediaIds = [...existingMediaKeys, ...newUploadedMedia];
 
-        if (mediaIds.length > 0) {
-          requestBody.mediaIds = mediaIds;
+        if (allMediaIds.length > 0) {
+          requestBody.mediaIds = allMediaIds;
           requestBody.hasMedia = true;
         }
       }
@@ -889,8 +964,26 @@ export function MediaTweetEditor({
                     Media for Tweet {index + 1}
                   </label>
 
+                  {/* Existing Media for this thread tweet */}
+                  {existingThreadMedia[index] &&
+                    existingThreadMedia[index].length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-xs text-muted-foreground mb-2">
+                          Existing Media:
+                        </div>
+                        <EditableSecureMediaGrid
+                          mediaKeys={existingThreadMedia[index]}
+                          onRemove={(mediaKey) =>
+                            removeExistingThreadMedia(index, mediaKey)
+                          }
+                        />
+                      </div>
+                    )}
+
                   {/* Add Media Button */}
-                  {tweetData.mediaFiles.length < 4 && (
+                  {(existingThreadMedia[index] || []).length +
+                    tweetData.mediaFiles.length <
+                    4 && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1041,8 +1134,21 @@ export function MediaTweetEditor({
             Media (Images & Videos)
           </label>
 
+          {/* Existing Media Display */}
+          {existingMediaKeys.length > 0 && (
+            <div className="mb-4">
+              <div className="text-xs text-muted-foreground mb-2">
+                Existing Media:
+              </div>
+              <EditableSecureMediaGrid
+                mediaKeys={existingMediaKeys}
+                onRemove={removeExistingMedia}
+              />
+            </div>
+          )}
+
           {/* Dropzone */}
-          {editMediaFiles.length < 4 && (
+          {existingMediaKeys.length + editMediaFiles.length < 4 && (
             <div
               {...getRootProps()}
               className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
