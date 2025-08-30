@@ -321,12 +321,12 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
       <Card className="hover:shadow-md transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0 pr-2">
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => toggleCollapse(tweet.nanoId)}
-                className="p-1 h-auto"
+                className="p-1 h-auto flex-shrink-0"
               >
                 {collapsedTweets.has(tweet.nanoId) ? (
                   <ChevronDown className="h-4 w-4" />
@@ -335,18 +335,22 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
                 )}
               </Button>
               {getStatusIcon(tweet.status)}
-              <Badge className={getStatusColor(tweet.status)}>
+              <Badge
+                className={`${getStatusColor(tweet.status)} flex-shrink-0`}
+              >
                 {tweet.status}
               </Badge>
               {tweet.tweetType === "thread" && (
-                <Badge variant="outline">Thread</Badge>
+                <Badge variant="outline" className="flex-shrink-0">
+                  Thread
+                </Badge>
               )}
               {(() => {
                 const communityName = getCommunityName(tweet.communityId);
                 return communityName ? (
                   <Badge
                     variant="secondary"
-                    className="bg-blue-100 text-blue-800"
+                    className="bg-blue-100 text-blue-800 flex-shrink-0"
                   >
                     <Users className="h-3 w-3 mr-1" />
                     {communityName}
@@ -354,7 +358,7 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
                 ) : tweet.communityId ? (
                   <Badge
                     variant="secondary"
-                    className="bg-gray-100 text-gray-600"
+                    className="bg-gray-100 text-gray-600 flex-shrink-0"
                   >
                     <Users className="h-3 w-3 mr-1" />
                     Community
@@ -362,7 +366,7 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
                 ) : null;
               })()}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               {tweet.status === "posted" && tweet.twitterTweetId && (
                 <Button
                   size="sm"
@@ -407,7 +411,7 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
           </div>
         </CardHeader>
         {!collapsedTweets.has(tweet.nanoId) && (
-          <CardContent>
+          <CardContent className="max-h-96 overflow-y-auto">
             {/* Show content and media for drafts and scheduled tweets */}
             {tweet.status !== "posted" && (
               <>
