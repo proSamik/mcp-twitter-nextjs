@@ -71,16 +71,29 @@ export function MediaTweetEditor({
   // Initialize form data when component mounts or tweet changes
   useEffect(() => {
     if (tweet) {
-      setEditMediaFiles([]); // Clear media files
+      // Helper function to create MediaFile from R2 key
+      const createMediaFileFromR2Key = (r2Key: string): MediaFile => ({
+        file: new File([], "existing-media"), // Placeholder file for existing media
+        url: `/api/media/${r2Key}`, // URL to fetch the media
+        type: "image", // Default to image, could be enhanced to detect type
+        size: 0, // Unknown size for existing files
+        uploading: false,
+        uploaded: true, // Already uploaded
+        uploadProgress: 100,
+        r2Key,
+        r2Url: `/api/media/${r2Key}`,
+      });
 
       if (tweet.tweetType === "thread") {
         // Check if we have structured threadTweets data
         if (tweet.threadTweets && tweet.threadTweets.length > 0) {
-          // Use structured thread data
+          // Use structured thread data with existing media
           setEditThreadTweets(
             tweet.threadTweets.map((threadTweet: any) => ({
               content: threadTweet.content,
-              mediaFiles: [], // Media files will be reconstructed from r2Keys if needed
+              mediaFiles: (threadTweet.mediaIds || []).map(
+                createMediaFileFromR2Key,
+              ),
             })),
           );
         } else {
@@ -96,9 +109,16 @@ export function MediaTweetEditor({
           );
         }
         setEditContent(""); // Clear single content for threads
+        setEditMediaFiles([]); // Clear single media for threads
       } else {
         setEditContent(tweet.content || "");
         setEditThreadTweets([]); // Clear thread tweets for single tweets
+
+        // Initialize single tweet media from existing mediaUrls
+        const existingMedia = (tweet.mediaUrls || []).map(
+          createMediaFileFromR2Key,
+        );
+        setEditMediaFiles(existingMedia);
       }
 
       // Pre-populate schedule date if editing a scheduled tweet
@@ -984,19 +1004,6 @@ export function MediaTweetEditor({
                       ))}
                     </div>
                   )}
-
-                  {/* Existing Media Preview for Thread Tweet */}
-                  {tweet?.threadTweets?.[index]?.mediaIds &&
-                    tweet.threadTweets[index].mediaIds.length > 0 && (
-                      <div className="mt-3">
-                        <label className="block text-sm font-medium mb-2">
-                          Existing Media for Tweet {index + 1}:
-                        </label>
-                        <SecureMediaGrid
-                          mediaKeys={tweet.threadTweets[index].mediaIds}
-                        />
-                      </div>
-                    )}
                 </div>
               </div>
             ))}
@@ -1141,16 +1148,6 @@ export function MediaTweetEditor({
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* Existing Media Preview */}
-          {tweet?.mediaUrls && tweet.mediaUrls.length > 0 && (
-            <div className="mt-3">
-              <label className="block text-sm font-medium mb-2">
-                Existing Media:
-              </label>
-              <SecureMediaGrid mediaKeys={tweet.mediaUrls} />
             </div>
           )}
         </div>
