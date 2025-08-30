@@ -127,17 +127,13 @@ export function MediaTweetEditor({
 
   // Load communities on component mount
   useEffect(() => {
-    if (tweet?.twitterAccountId) {
-      fetchCommunities(tweet.twitterAccountId);
-    }
-  }, [tweet?.twitterAccountId]);
+    fetchCommunities();
+  }, []);
 
-  const fetchCommunities = async (twitterAccountId: string) => {
+  const fetchCommunities = async () => {
     try {
       setCommunitiesLoading(true);
-      const response = await fetch(
-        `/api/twitter/communities?twitterAccountId=${twitterAccountId}`,
-      );
+      const response = await fetch("/api/communities");
       const data = await response.json();
 
       if (data.success) {
