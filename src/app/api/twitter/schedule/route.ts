@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       threadTweets,
       threadData, // New format: [{ content: string, mediaIds: string[] }]
       tags = [],
+      communityId,
     } = body;
 
     // Validate required fields
@@ -202,6 +203,7 @@ export async function POST(request: NextRequest) {
               }))
             : [],
         tags,
+        communityId: communityId || null,
         twitterAccountId,
         userId,
       })
