@@ -84,6 +84,7 @@ interface UploadQueueItem {
 
 interface MediaTweetComposerProps {
   userId?: string;
+  onTweetAction?: () => void;
 }
 
 /**
@@ -197,7 +198,10 @@ class UploadQueue {
   }
 }
 
-export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
+export function MediaTweetComposer({
+  userId,
+  onTweetAction,
+}: MediaTweetComposerProps = {}) {
   const [content, setContent] = useState("");
   const [accounts, setAccounts] = useState<TwitterAccount[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
@@ -781,6 +785,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         setContent("");
         setThreadTweets([{ content: "", mediaFiles: [] }]);
         setIsThread(false);
+        onTweetAction?.();
         setSelectedCommunity("none");
         // Clean up media files after successful post
         if (isThread) {
@@ -917,6 +922,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
         toast.success(
           `Tweet scheduled for ${localDateTime.toLocaleDateString()} at ${localDateTime.toLocaleTimeString()}`,
         );
+        onTweetAction?.();
         setContent("");
         setThreadTweets([{ content: "", mediaFiles: [] }]);
         setIsThread(false);
@@ -1001,6 +1007,7 @@ export function MediaTweetComposer({ userId }: MediaTweetComposerProps = {}) {
 
       if (data.success) {
         toast.success("Draft saved successfully!");
+        onTweetAction?.();
         setContent("");
         setThreadTweets([{ content: "", mediaFiles: [] }]);
         setMediaFiles([]);
