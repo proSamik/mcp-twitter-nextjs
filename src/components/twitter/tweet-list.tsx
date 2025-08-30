@@ -36,7 +36,6 @@ import {
   Calendar,
   Edit,
   Trash2,
-  ExternalLink,
   Clock,
   CheckCircle2,
   FileText,
