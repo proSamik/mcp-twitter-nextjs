@@ -47,6 +47,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { TweetEntity } from "@/lib/db/pg/schema.pg";
 import { useTweetListWebSocket } from "@/lib/websocket/client";
@@ -72,6 +74,9 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [editingTweet, setEditingTweet] = useState<TweetEntity | null>(null);
     const [collapsedTweets, setCollapsedTweets] = useState<Set<string>>(
+      new Set(),
+    );
+    const [hiddenPreviews, setHiddenPreviews] = useState<Set<string>>(
       new Set(),
     );
 
@@ -301,6 +306,18 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
       });
     };
 
+    const togglePreview = (tweetId: string) => {
+      setHiddenPreviews((prev) => {
+        const newSet = new Set(prev);
+        if (newSet.has(tweetId)) {
+          newSet.delete(tweetId);
+        } else {
+          newSet.add(tweetId);
+        }
+        return newSet;
+      });
+    };
+
     const TweetCard = ({ tweet }: { tweet: TweetEntity }) => (
       <Card className="hover:shadow-md transition-shadow">
         <CardHeader className="pb-3">
@@ -351,14 +368,13 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() =>
-                    window.open(
-                      `https://twitter.com/i/web/status/${tweet.twitterTweetId}`,
-                      "_blank",
-                    )
-                  }
+                  onClick={() => togglePreview(tweet.nanoId)}
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  {hiddenPreviews.has(tweet.nanoId) ? (
+                    <Eye className="h-4 w-4" />
+                  ) : (
+                    <EyeOff className="h-4 w-4" />
+                  )}
                 </Button>
               )}
               {tweet.status === "draft" && (
@@ -447,7 +463,8 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
               <div className="mb-4">
                 <TweetEmbed
                   tweetId={tweet.twitterTweetId}
-                  showPreview={true}
+                  showPreview={!hiddenPreviews.has(tweet.nanoId)}
+                  hideControls={true}
                   className="mb-3"
                 />
               </div>
@@ -605,55 +622,63 @@ export const TweetList = forwardRef<TweetListRef, TweetListProps>(
               <TabsTrigger value="posted">Posted</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="all" className="space-y-4 mt-4">
+            <TabsContent value="all" className="mt-4">
               {sortedTweets.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No tweets yet. Start by composing your first tweet!</p>
                 </div>
               ) : (
-                sortedTweets.map((tweet) => (
-                  <TweetCard key={tweet.nanoId} tweet={tweet} />
-                ))
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {sortedTweets.map((tweet) => (
+                    <TweetCard key={tweet.nanoId} tweet={tweet} />
+                  ))}
+                </div>
               )}
             </TabsContent>
 
-            <TabsContent value="drafts" className="space-y-4 mt-4">
+            <TabsContent value="drafts" className="mt-4">
               {drafts.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No drafts saved.</p>
                 </div>
               ) : (
-                drafts.map((tweet) => (
-                  <TweetCard key={tweet.nanoId} tweet={tweet} />
-                ))
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {drafts.map((tweet) => (
+                    <TweetCard key={tweet.nanoId} tweet={tweet} />
+                  ))}
+                </div>
               )}
             </TabsContent>
 
-            <TabsContent value="scheduled" className="space-y-4 mt-4">
+            <TabsContent value="scheduled" className="mt-4">
               {scheduled.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No scheduled tweets.</p>
                 </div>
               ) : (
-                scheduled.map((tweet) => (
-                  <TweetCard key={tweet.nanoId} tweet={tweet} />
-                ))
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {scheduled.map((tweet) => (
+                    <TweetCard key={tweet.nanoId} tweet={tweet} />
+                  ))}
+                </div>
               )}
             </TabsContent>
 
-            <TabsContent value="posted" className="space-y-4 mt-4">
+            <TabsContent value="posted" className="mt-4">
               {posted.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No posted tweets.</p>
                 </div>
               ) : (
-                posted.map((tweet) => (
-                  <TweetCard key={tweet.nanoId} tweet={tweet} />
-                ))
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {posted.map((tweet) => (
+                    <TweetCard key={tweet.nanoId} tweet={tweet} />
+                  ))}
+                </div>
               )}
             </TabsContent>
           </Tabs>

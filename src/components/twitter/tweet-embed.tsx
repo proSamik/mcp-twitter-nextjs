@@ -13,25 +13,30 @@ interface TweetEmbedProps {
   tweetId: string;
   showPreview?: boolean;
   className?: string;
+  hideControls?: boolean;
 }
 
-export function TweetEmbed({ 
-  tweetId, 
-  showPreview = true, 
-  className = "" 
+export function TweetEmbed({
+  tweetId,
+  showPreview = true,
+  className = "",
+  hideControls = false,
 }: TweetEmbedProps) {
   const [isExpanded, setIsExpanded] = useState(showPreview);
+
+  // Use controlled state when hideControls is true
+  const actuallyExpanded = hideControls ? showPreview : isExpanded;
   const [embedError, setEmbedError] = useState(false);
   const { theme, resolvedTheme } = useTheme();
-  const [tweetTheme, setTweetTheme] = useState<'light' | 'dark'>('dark');
+  const [tweetTheme, setTweetTheme] = useState<"light" | "dark">("dark");
 
   // Detect theme and set tweet theme
   useEffect(() => {
     const currentTheme = resolvedTheme || theme;
-    if (currentTheme?.includes('dark')) {
-      setTweetTheme('dark');
+    if (currentTheme?.includes("dark")) {
+      setTweetTheme("dark");
     } else {
-      setTweetTheme('light');
+      setTweetTheme("light");
     }
   }, [theme, resolvedTheme]);
 
@@ -40,12 +45,14 @@ export function TweetEmbed({
   };
 
   const handleViewOnTwitter = () => {
-    window.open(`https://twitter.com/i/web/status/${tweetId}`, '_blank');
+    window.open(`https://twitter.com/i/web/status/${tweetId}`, "_blank");
   };
 
   const handleEmbedError = () => {
     setEmbedError(true);
-    toast.error("Failed to load tweet embed. The tweet may have been deleted or made private.");
+    toast.error(
+      "Failed to load tweet embed. The tweet may have been deleted or made private.",
+    );
   };
 
   if (!tweetId) {
@@ -60,44 +67,45 @@ export function TweetEmbed({
             <Badge variant="secondary" className="bg-green-100 text-green-800">
               Posted Tweet
             </Badge>
-            <span className="text-sm text-muted-foreground">
-              ID: {tweetId}
-            </span>
+            <span className="text-sm text-muted-foreground">ID: {tweetId}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleTogglePreview}
-              className="text-xs"
-            >
-              {isExpanded ? (
-                <>
-                  <EyeOff className="h-3 w-3 mr-1" />
-                  Hide Preview
-                </>
-              ) : (
-                <>
-                  <Eye className="h-3 w-3 mr-1" />
-                  Show Preview
-                </>
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleViewOnTwitter}
-              className="text-xs"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              View on Twitter
-            </Button>
+            {!hideControls && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleTogglePreview}
+                  className="text-xs"
+                >
+                  {isExpanded ? (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide Preview
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show Preview
+                    </>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleViewOnTwitter}
+                  className="text-xs"
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  View on Twitter
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
-
         {/* Embedded tweet preview */}
-        {isExpanded && (
+        {actuallyExpanded && (
           <div className="mt-3">
             {embedError ? (
               <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -107,14 +115,17 @@ export function TweetEmbed({
                     Unable to load tweet embed
                   </p>
                   <p className="text-xs text-red-600 mt-1">
-                    The tweet may have been deleted, made private, or there&apos;s a network issue.
+                    The tweet may have been deleted, made private, or
+                    there&apos;s a network issue.
                   </p>
                 </div>
               </div>
             ) : (
-              <div className={`border rounded-lg overflow-hidden ${tweetTheme === 'dark' ? 'dark' : ''}`}>
-                <div className={tweetTheme === 'dark' ? 'dark' : 'light'}>
-                  <Tweet 
+              <div
+                className={`border rounded-lg overflow-hidden ${tweetTheme === "dark" ? "dark" : ""}`}
+              >
+                <div className={tweetTheme === "dark" ? "dark" : "light"}>
+                  <Tweet
                     id={tweetId}
                     onError={handleEmbedError}
                     components={{
@@ -126,7 +137,8 @@ export function TweetEmbed({
                               Tweet not found
                             </p>
                             <p className="text-xs text-yellow-600 mt-1">
-                              {error?.message || "This tweet may have been deleted or is not accessible."}
+                              {error?.message ||
+                                "This tweet may have been deleted or is not accessible."}
                             </p>
                           </div>
                         </div>
