@@ -41,6 +41,7 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  Users,
 } from "lucide-react";
 import { TweetEntity } from "@/lib/db/pg/schema.pg";
 import { useTweetListWebSocket } from "@/lib/websocket/client";
@@ -49,6 +50,7 @@ import { format } from "date-fns";
 import { TweetEmbed } from "./tweet-embed";
 import { SecureMediaGrid } from "@/components/ui/secure-media";
 import { MediaTweetEditor } from "./media-tweet-editor";
+import { Community } from "./shared/composer-utils";
 
 interface TweetListProps {
   userId: string;
@@ -73,6 +75,7 @@ export function TweetList({ userId }: TweetListProps) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [communities, setCommunities] = useState<Community[]>([]);
 
   // Set up WebSocket for real-time updates
   const { setTweets: setWebSocketTweets } = useTweetListWebSocket(
@@ -98,6 +101,52 @@ export function TweetList({ userId }: TweetListProps) {
   useEffect(() => {
     fetchTweets();
   }, [currentPage]);
+
+  // Fetch communities for all connected Twitter accounts
+  useEffect(() => {
+    fetchAllCommunities();
+  }, []);
+
+  const fetchAllCommunities = async () => {
+    try {
+      // First get all connected accounts
+      const accountsResponse = await fetch("/api/twitter/accounts");
+      const accountsData = await accountsResponse.json();
+
+      if (accountsData.success && accountsData.accounts?.length > 0) {
+        // Fetch communities for each account
+        const allCommunities: Community[] = [];
+
+        for (const account of accountsData.accounts) {
+          try {
+            const response = await fetch(
+              `/api/twitter/communities?twitterAccountId=${account.id}`,
+            );
+            const data = await response.json();
+
+            if (data.success && data.communities) {
+              allCommunities.push(...data.communities);
+            }
+          } catch (error) {
+            console.error(
+              `Error fetching communities for account ${account.id}:`,
+              error,
+            );
+          }
+        }
+
+        setCommunities(allCommunities);
+      }
+    } catch (error) {
+      console.error("Error fetching communities:", error);
+    }
+  };
+
+  const getCommunityName = (communityId: string | null) => {
+    if (!communityId) return null;
+    const community = communities.find((c) => c.communityId === communityId);
+    return community?.name || communityId;
+  };
 
   const fetchTweets = async (page = currentPage) => {
     try {
@@ -280,6 +329,12 @@ export function TweetList({ userId }: TweetListProps) {
             </Badge>
             {tweet.tweetType === "thread" && (
               <Badge variant="outline">Thread</Badge>
+            )}
+            {tweet.communityId && getCommunityName(tweet.communityId) && (
+              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                <Users className="h-3 w-3 mr-1" />
+                {getCommunityName(tweet.communityId)}
+              </Badge>
             )}
           </div>
           <div className="flex items-center gap-1">
