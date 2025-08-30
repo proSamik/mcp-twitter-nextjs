@@ -4,6 +4,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "ui/button";
 import { Textarea } from "ui/textarea";
 import { Input } from "ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "ui/select";
 import { useDropzone } from "react-dropzone";
 import Image from "next/image";
 import {
@@ -16,11 +23,13 @@ import {
   X,
   Play,
   AlertCircle,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TweetEntity } from "@/lib/db/pg/schema.pg";
 import { format } from "date-fns";
 import { SecureMediaGrid } from "@/components/ui/secure-media";
+import { Community } from "../shared/composer-utils";
 
 interface MediaFile {
   file: File;
@@ -55,6 +64,8 @@ export function MediaTweetEditor({
   const [isScheduling, setIsScheduling] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [communities, setCommunities] = useState<Community[]>([]);
+  const [selectedCommunity, setSelectedCommunity] = useState<string>("");
 
   // Initialize form data when component mounts or tweet changes
   useEffect(() => {
@@ -103,8 +114,35 @@ export function MediaTweetEditor({
       } else {
         setScheduleDate("");
       }
+
+      // Initialize community selection
+      setSelectedCommunity(tweet.communityId || "none");
     }
   }, [tweet]);
+
+  // Load communities on component mount
+  useEffect(() => {
+    if (tweet?.twitterAccountId) {
+      fetchCommunities(tweet.twitterAccountId);
+    }
+  }, [tweet?.twitterAccountId]);
+
+  const fetchCommunities = async (twitterAccountId: string) => {
+    try {
+      const response = await fetch(
+        `/api/twitter/communities?twitterAccountId=${twitterAccountId}`,
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        setCommunities(data.communities || []);
+      } else {
+        console.error("Failed to fetch communities:", data.error);
+      }
+    } catch (error) {
+      console.error("Error fetching communities:", error);
+    }
+  };
 
   // Helper functions for thread management
   const updateEditThreadTweet = (index: number, content: string) => {
@@ -582,6 +620,7 @@ export function MediaTweetEditor({
         action: "schedule",
         scheduledFor: scheduleDate, // Send raw datetime string
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        communityId: selectedCommunity === "none" ? null : selectedCommunity,
       };
 
       // Handle content changes
@@ -653,6 +692,7 @@ export function MediaTweetEditor({
         action: "reschedule",
         scheduledFor: scheduleDate, // Send raw datetime string
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        communityId: selectedCommunity === "none" ? null : selectedCommunity,
       };
 
       // Handle content changes
@@ -722,6 +762,7 @@ export function MediaTweetEditor({
       const requestBody: any = {
         tweetId: tweet.nanoId,
         action: "post",
+        communityId: selectedCommunity === "none" ? null : selectedCommunity,
       };
 
       // Handle content changes
@@ -1129,6 +1170,32 @@ export function MediaTweetEditor({
         <div className="text-sm text-muted-foreground">
           Currently scheduled for:{" "}
           {format(new Date(tweet.scheduledFor), "MMM d, yyyy 'at' h:mm a")}
+        </div>
+      )}
+
+      {/* Community Selection */}
+      {communities.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Community (optional):</label>
+          <Select
+            value={selectedCommunity}
+            onValueChange={setSelectedCommunity}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select community (optional)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Community</SelectItem>
+              {communities.map((community) => (
+                <SelectItem key={community.id} value={community.communityId}>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    <span>{community.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
